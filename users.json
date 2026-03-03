@@ -1,0 +1,9 @@
+[
+  {
+    "username": "admin",
+    "password": "password",
+    "role": "CoE_Super_Admin",
+    "id": "usr_001",
+    "name": "System Administrator"
+  }
+]

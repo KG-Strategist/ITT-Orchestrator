@@ -1,0 +1,42 @@
+{
+  "name": "itt-orchestrator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server.ts"
+  },
+  "dependencies": {
+    "@remix-run/router": "1.15.3",
+    "@tanstack/react-query": "^5.90.21",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@xyflow/react": "^12.10.1",
+    "axios": "^1.7.7",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "0.292.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-router": "6.22.3",
+    "react-router-dom": "^6.22.3",
+    "reactflow": "^11.11.4",
+    "recharts": "2.12.0",
+    "tailwind-merge": "^3.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.14.0",
+    "concurrently": "^9.2.1"
+  }
+}

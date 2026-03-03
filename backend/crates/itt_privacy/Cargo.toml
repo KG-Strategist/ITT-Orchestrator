@@ -1,0 +1,12 @@
+[package]
+name = "itt_privacy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+tracing = "0.1"
+regex = "1.10"
+sha2 = "0.10"
+hex = "0.4"
+itt_memory = { path = "../itt_memory" }

@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # MongoDB - Primary data store (replacing Neo4j for simplicity)
+  mongodb:
+    image: mongo:7.0
+    container_name: itt_mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongoadmin
+      MONGO_INITDB_ROOT_PASSWORD: mongopass
+      MONGO_INITDB_DATABASE: itt_orchestrator
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/init.js
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - itt-network
+
+  # Neo4j - Graph database for relationships
+  neo4j:
+    image: neo4j:5.15
+    container_name: itt_neo4j
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      NEO4J_AUTH: neo4j/neo4jpass
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - itt-network
+
+  # Redis - Cache layer (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: itt_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - itt-network
+
+  # Rust Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: itt_api
+    ports:
+      - "3001:3001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "3001"
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      
+      # MongoDB
+      MONGODB_URI: mongodb://mongoadmin:mongopass@mongodb:27017
+      MONGODB_DATABASE: itt_orchestrator
+      
+      # Neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: neo4jpass
+      
+      # Security (use real values in production!)
+      JWT_SECRET: dev-secret-key-at-least-32-chars-long-12345
+      JWT_EXPIRY: 24h
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      
+      # Feature Flags
+      TEST_MODE: "true"
+      ENABLE_COST_ARBITRAGE: "true"
+      ENABLE_SEMANTIC_FIREWALL: "true"
+      
+      # Performance
+      CACHE_TTL_SECS: 600
+      DATABASE_POOL_SIZE: 10
+      
+      # Compliance
+      DPDP_ENABLED: "true"
+      GDPR_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - itt-network
+    # Uncomment for local development without Docker build
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.dev
+
+  # Frontend (React/Vite)
+  frontend:
+    image: node:20-alpine
+    container_name: itt_frontend
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://backend:3001
+      NODE_ENV: development
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - itt-network
+
+volumes:
+  mongodb_data:
+  neo4j_data:
+  redis_data:
+
+networks:
+  itt-network:
+    driver: bridge

@@ -1,0 +1,474 @@
+openapi: 3.0.0
+info:
+  title: ITT-Orchestrator API
+  description: Secure Enterprise Agent Gateway (SEAG) - Production Control Plane API
+  version: 0.1.0
+  contact:
+    name: ITT-Orchestrator Team
+    url: https://github.com/your-org/itt-orchestrator
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Development server
+  - url: https://api.example.com/api/v1
+    description: Production server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Bearer token. Obtain from POST /auth/login
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error_id
+        - status
+        - message
+      properties:
+        error_id:
+          type: string
+          format: uuid
+          description: Unique error identifier for tracking
+        status:
+          type: integer
+          description: HTTP status code
+        message:
+          type: string
+        details:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Bearer token
+        expires_in:
+          type: integer
+          description: Token expiry in seconds
+        token_type:
+          type: string
+          example: Bearer
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptime_secs:
+          type: integer
+
+    ApiRegistryEntry:
+      type: object
+      required:
+        - id
+        - name
+        - spec_link
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: API name
+        spec_link:
+          type: string
+          description: Link to OpenAPI specification
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Zone:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Zone name (e.g., Zone 1, Zone 4)
+        description:
+          type: string
+        ips:
+          type: array
+          items:
+            type: string
+            format: ipv4
+        filters:
+          type: array
+          items:
+            type: string
+
+    IntegrationRequest:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [api, database, message_queue, webhook]
+        endpoint:
+          type: string
+          format: uri
+        credentials:
+          type: object
+          additionalProperties: true
+
+    IntegrationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, scanned_and_classified, failed]
+        message:
+          type: string
+
+    MdmRule:
+      type: object
+      required:
+        - name
+        - rule_type
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rule_type:
+          type: string
+        conditions:
+          type: object
+        actions:
+          type: array
+          items:
+            type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      security: []
+      tags:
+        - System
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /readiness:
+    get:
+      operationId: getReadiness
+      summary: Readiness check endpoint
+      description: Readiness check for Kubernetes probes
+      security: []
+      tags:
+        - System
+      responses:
+        '200':
+          description: API is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Login endpoint
+      description: |
+        Authenticate user and receive JWT token.
+        
+        Default credentials for development:
+        - Username: admin, Password: any
+        - Username: user, Password: any
+      security: []
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registry:
+    get:
+      operationId: getRegistry
+      summary: Get API Registry
+      description: Fetches all discovered and registered APIs
+      tags:
+        - API Registry
+      responses:
+        '200':
+          description: List of registered APIs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiRegistryEntry'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registry/{id}:
+    delete:
+      operationId: deleteRegistry
+      summary: Delete API from Registry
+      tags:
+        - API Registry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: API deleted successfully
+        '401':
+          description: Unauthorized
+        '404':
+          description: API not found
+
+  /integrations:
+    get:
+      operationId: getIntegrations
+      summary: Get Integrations
+      tags:
+        - Integrations
+      responses:
+        '200':
+          description: List of integrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+    post:
+      operationId: postIntegration
+      summary: Create Integration
+      description: Trigger auto-discovery for a new integration
+      tags:
+        - Integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationRequest'
+      responses:
+        '202':
+          description: Integration creation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /zones:
+    get:
+      operationId: getZones
+      summary: Get Adaptive Gateway Fabric Zones
+      tags:
+        - Zones
+      responses:
+        '200':
+          description: List of zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+
+    post:
+      operationId: postZone
+      summary: Create Zone
+      description: Create a new Adaptive Gateway Fabric zone
+      tags:
+        - Zones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Zone'
+      responses:
+        '201':
+          description: Zone created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+
+  /mdm/rules:
+    get:
+      operationId: getMdmRules
+      summary: Get Master Data Management Rules
+      tags:
+        - MDM
+      responses:
+        '200':
+          description: List of MDM rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MdmRule'
+
+    post:
+      operationId: postMdmRule
+      summary: Create MDM Rule
+      tags:
+        - MDM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MdmRule'
+      responses:
+        '201':
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MdmRule'
+
+  /mdm/rules/{id}:
+    delete:
+      operationId: deleteMdmRule
+      summary: Delete MDM Rule
+      tags:
+        - MDM
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Rule deleted
+
+  /generate-dag:
+    post:
+      operationId: generateDag
+      summary: Generate DAG from Intent
+      description: |
+        Generate a Directed Acyclic Graph (DAG) from a natural language intent.
+        Uses TinyTransformer for classification and routing.
+      tags:
+        - Orchestration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                  description: Natural language intent
+      responses:
+        '200':
+          description: DAG generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dag_id:
+                    type: string
+                  nodes:
+                    type: array
+                  edges:
+                    type: array

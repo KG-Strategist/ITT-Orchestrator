@@ -1,0 +1,17 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Light Blue Nodal Ring -->
+  <circle cx="50" cy="50" r="38" stroke="#22d3ee" stroke-width="1.5" stroke-opacity="0.6" />
+  
+  <!-- 8 Connection Nodes (Light Blue) -->
+  <circle cx="88" cy="50" r="4.5" fill="#67e8f9" />
+  <circle cx="76.87" cy="76.87" r="4.5" fill="#67e8f9" />
+  <circle cx="50" cy="88" r="4.5" fill="#67e8f9" />
+  <circle cx="23.13" cy="76.87" r="4.5" fill="#67e8f9" />
+  <circle cx="12" cy="50" r="4.5" fill="#67e8f9" />
+  <circle cx="23.13" cy="23.13" r="4.5" fill="#67e8f9" />
+  <circle cx="50" cy="12" r="4.5" fill="#67e8f9" />
+  <circle cx="76.87" cy="23.13" r="4.5" fill="#67e8f9" />
+  
+  <!-- Central Navy G/U Hook Mark -->
+  <path d="M34 25 V60 C34 74 40 80 50 80 C60 80 66 74 66 60 V45 L58 50" stroke="#1e293b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

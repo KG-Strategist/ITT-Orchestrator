@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build outputs
+target
+dist
+dist-ssr
+build
+node_modules
+
+# Dependencies
+.cargo
+package-lock.json
+yarn.lock
+
+# Environment files (don't ship secrets!)
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Documentation
+README.md
+ARCHITECTURE.md
+LICENSE
+
+# Dev/test files
+.git
+.github
+tests
+.test
+.spec
+vitest.config.ts
+jest.config.js
+
+# Docker
+Dockerfile.dev
+docker-compose.dev.yml
+docker-compose.override.yml
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+
+# Miscellaneous
+.env.local
+*.swp
+*.swo
+*~
+.project
+.classpath
