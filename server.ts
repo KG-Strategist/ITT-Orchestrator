@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-itt-orchestrator';
+const JWT_SECRET = process.env.JWT_SECRET || 'development-secret-key-change-in-production';
 
 async function startServer() {
   const app = express();
@@ -24,8 +24,23 @@ async function startServer() {
 
     try {
       // Read file-based DB
-      const usersData = fs.readFileSync(path.join(__dirname, 'users.json'), 'utf-8');
-      const users = JSON.parse(usersData);
+      let users = [];
+      const usersPath = path.join(__dirname, 'users.json');
+      if (fs.existsSync(usersPath)) {
+        const usersData = fs.readFileSync(usersPath, 'utf-8');
+        users = JSON.parse(usersData);
+      } else {
+        // Fallback for development/demo if users.json is missing
+        users = [
+          {
+            username: "admin",
+            password: "password",
+            role: "CoE_Super_Admin",
+            id: "usr_001",
+            name: "System Administrator"
+          }
+        ];
+      }
 
       const user = users.find((u: any) => u.username === username && u.password === password);
 

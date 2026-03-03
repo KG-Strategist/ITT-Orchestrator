@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Network, ShieldCheck, Activity, Lock, Plus, Trash2, Server, Globe, Save, Cpu, HardDrive, ToggleLeft, ToggleRight, FileJson, Layers, ShieldAlert, BrainCircuit } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { apiClient } from '../api/client';
+import { api, apiEndpoints } from '../api/client';
 
 const iconMap: Record<string, any> = {
   Lock, ShieldCheck, Activity, Network, Globe, Layers, ShieldAlert, BrainCircuit
@@ -88,7 +88,7 @@ const ZoneManagement: React.FC = () => {
   useEffect(() => {
     const fetchZones = async () => {
       try {
-        const data = await apiClient.get('/api/v1/zones');
+        const data: any = await api.get(apiEndpoints.zones.list);
         if (data && data.length > 0) {
           setZones(data);
           setActiveZone(data[0]);
@@ -142,7 +142,7 @@ const ZoneManagement: React.FC = () => {
     };
     
     try {
-      const savedZone = await apiClient.post('/api/v1/zones', newZone);
+      const savedZone = await api.post(apiEndpoints.zones.create, newZone);
       setZones([...zones, savedZone]);
       setActiveZone(savedZone);
     } catch (e) {
@@ -156,8 +156,8 @@ const ZoneManagement: React.FC = () => {
       return;
     }
     try {
-      await apiClient.put(`/api/v1/zones/${activeZone.id}`, activeZone);
-      alert("Zone configuration saved successfully.");
+      await api.put(apiEndpoints.zones.list, activeZone);
+      alert("Zone configuration saved successfully");
     } catch (e) {
       console.error("Failed to save zone", e);
       alert("Failed to save zone configuration.");

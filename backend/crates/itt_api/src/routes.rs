@@ -16,7 +16,7 @@ pub async fn get_registry(
     
     let apis = state.memory.get_registry().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
     
     Ok(Json(apis))
@@ -38,7 +38,7 @@ pub async fn get_zones(
     tracing::info!("Fetching Zones...");
     let zones = state.memory.get_zones().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
     Ok(Json(zones))
 }
@@ -63,7 +63,7 @@ pub async fn post_integration(
     
     // 1. Tokenize/Mask PII in the payload before cognitive processing
     let raw_json = serde_json::to_string(&payload).unwrap_or_default();
-    let safe_payload = state.privacy.mask_pii(&raw_json).map_err(|_| ApiError::InternalServerError)?;
+    let safe_payload = state.privacy.mask_pii(&raw_json).map_err(|_| ApiError::InternalServerError { message: "Internal server error".to_string(), details: None })?;
 
     // 2. TinyTransformer Auto-Classification
     let integration_id = format!("int_{}", Uuid::new_v4());
@@ -72,7 +72,7 @@ pub async fn post_integration(
     // 3. Store in Smart Corpus (Graph DB)
     state.memory.add_api_node(classified_api).await.map_err(|e| {
         tracing::error!("Failed to store classified API: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
 
     let response = IntegrationResponse {
@@ -103,7 +103,7 @@ pub async fn post_zone(
 
     state.memory.add_zone(new_zone).await.map_err(|e| {
         tracing::error!("Failed to store zone: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
 
     let response = ZoneResponse {
@@ -121,7 +121,7 @@ pub async fn get_mdm_rules(
     tracing::info!("Fetching MDM Rules...");
     let rules = state.memory.get_mdm_rules().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
     Ok(Json(rules))
 }
@@ -138,7 +138,7 @@ pub async fn post_mdm_rule(
 
     state.memory.add_mdm_rule(new_rule.clone()).await.map_err(|e| {
         tracing::error!("Failed to store MDM rule: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
 
     Ok((StatusCode::CREATED, Json(new_rule)))
@@ -152,7 +152,7 @@ pub async fn delete_mdm_rule(
     tracing::info!("Deleting MDM Rule: {}", id);
     state.memory.delete_mdm_rule(id).await.map_err(|e| {
         tracing::error!("Failed to delete MDM rule: {:?}", e);
-        ApiError::InternalServerError
+        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
     })?;
     Ok(StatusCode::NO_CONTENT)
 }

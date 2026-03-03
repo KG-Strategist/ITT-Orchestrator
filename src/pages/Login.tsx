@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, User, KeyRound, AlertCircle, Server } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { apiClient } from '../api/client';
+import { api, apiEndpoints } from '../api/client';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await apiClient.post('/auth/login', { username, password });
+      const response: any = await api.post(apiEndpoints.auth.login, { username, password });
       
       if (response.token && response.user) {
         login(response.user, response.token);
