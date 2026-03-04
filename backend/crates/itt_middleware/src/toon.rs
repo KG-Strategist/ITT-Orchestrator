@@ -7,51 +7,65 @@
 use serde_json::Value;
 use tracing::{debug, instrument};
 
+use crate::error::AppError;
+
 /// The TOON Transformer for Zone 4.
 pub struct ToonTransformer;
 
 impl ToonTransformer {
     /// Converts a verbose JSON payload into a token-efficient TOON format.
-    /// This is a simplified implementation for demonstration purposes.
+    /// Strips unnecessary JSON syntax (quotes, commas, array brackets) and
+    /// compresses it into a dense, LLM-readable text format.
     #[instrument(name = "ToonTransformer::json_to_toon", skip(json_payload))]
-    pub fn json_to_toon(json_payload: &str) -> Result<String, String> {
-        let parsed: Value = serde_json::from_str(json_payload).map_err(|e| e.to_string())?;
+    pub fn json_to_toon(json_payload: &str) -> Result<String, AppError> {
+        let parsed: Value = serde_json::from_str(json_payload)
+            .map_err(|e| AppError::InternalError(format!("Failed to parse JSON for TOON conversion: {}", e)))?;
         
-        // A naive TOON transformation: flattening and removing quotes/braces where possible
-        // to minimize token count for LLMs.
-        let toon_str = Self::flatten_value(&parsed, "");
+        let toon_str = Self::flatten_value(&parsed);
         
         debug!(
             original_len = json_payload.len(),
             toon_len = toon_str.len(),
+            compression_ratio = format!("{:.2}%", (1.0 - (toon_str.len() as f64 / json_payload.len() as f64)) * 100.0),
             "Transformed JSON to TOON"
         );
         
         Ok(toon_str)
     }
 
-    fn flatten_value(val: &Value, prefix: &str) -> String {
+    fn flatten_value(val: &Value) -> String {
         match val {
             Value::Object(map) => {
-                let mut out = String::new();
+                let mut out = String::from("(");
+                let mut first = true;
                 for (k, v) in map {
-                    let new_prefix = if prefix.is_empty() { k.clone() } else { format!("{}.{}", prefix, k) };
-                    out.push_str(&Self::flatten_value(v, &new_prefix));
+                    if !first {
+                        out.push(' ');
+                    }
+                    out.push_str(k);
+                    out.push_str(": ");
+                    out.push_str(&Self::flatten_value(v));
+                    first = false;
                 }
+                out.push(')');
                 out
             }
             Value::Array(arr) => {
                 let mut out = String::new();
-                for (i, v) in arr.iter().enumerate() {
-                    let new_prefix = format!("{}[{}]", prefix, i);
-                    out.push_str(&Self::flatten_value(v, &new_prefix));
+                let mut first = true;
+                for v in arr {
+                    if !first {
+                        out.push(' ');
+                    }
+                    out.push_str(&Self::flatten_value(v));
+                    first = false;
                 }
                 out
             }
-            Value::String(s) => format!("{}:{}\n", prefix, s),
-            Value::Number(n) => format!("{}:{}\n", prefix, n),
-            Value::Bool(b) => format!("{}:{}\n", prefix, b),
-            Value::Null => format!("{}:null\n", prefix),
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "null".to_string(),
         }
     }
 }

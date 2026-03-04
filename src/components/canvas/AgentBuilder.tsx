@@ -47,6 +47,7 @@ import {
 } from './CustomNodes';
 import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2 } from 'lucide-react';
 import { useOrchestratorStore } from '../../store/orchestratorStore';
+import { api } from '../../api/client';
 
 const nodeTypes = {
   intentTrigger: IntentTriggerNode,
@@ -351,7 +352,16 @@ spec:
   finops_budget: 500.00
   dpdp_masking_required: true
   nodes:
-${nodes.map(n => `    - id: ${n.id}\n      type: ${n.type}`).join('\n')}
+${nodes.map(n => {
+  let nodeYaml = `    - id: ${n.id}\n      type: ${n.type}`;
+  if (n.type === 'tokenBudget') {
+    nodeYaml += `\n      budget_inr: ${n.data.budget || '10.00'}`;
+    nodeYaml += `\n      fallback_model: ${n.data.fallbackModel || 'llama-3-8b-local'}`;
+  } else if (n.type === 'semanticFirewall') {
+    nodeYaml += `\n      trust_threshold: ${n.data.threshold || '85'}`;
+  }
+  return nodeYaml;
+}).join('\n')}
 `;
   };
 
@@ -692,44 +702,141 @@ ${nodes.map(n => `    - id: ${n.id}\n      type: ${n.type}`).join('\n')}
       </main>
 
       {/* Properties Panel (Right Sidebar) */}
-      {selectedNode && selectedNode.type === 'federatedLearner' && (
+      {selectedNode && (
         <aside className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col z-10 shrink-0">
           <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-            <h3 className="font-bold text-white flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-violet-400"/> Node Properties</h3>
+            <h3 className="font-bold text-white flex items-center gap-2">
+              {selectedNode.type === 'federatedLearner' && <BrainCircuit className="w-4 h-4 text-violet-400"/>}
+              {selectedNode.type === 'tokenBudget' && <Zap className="w-4 h-4 text-emerald-400"/>}
+              {selectedNode.type === 'semanticFirewall' && <ShieldAlert className="w-4 h-4 text-rose-400"/>}
+              Node Properties
+            </h3>
             <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4"/></button>
           </div>
-          <div className="p-4 space-y-6">
-            <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Configuration Profile</h4>
-              <div className="bg-slate-950 border border-slate-800 rounded p-2 text-sm text-violet-300 font-mono">
-                CAL 4 (Decentralized National & Cross-Border)
-              </div>
-            </div>
+          <div className="p-4 space-y-6 flex-1 overflow-y-auto">
             
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Privacy Controls</h4>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Homomorphic Encryption (HE)</span>
-                <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Local Differential Privacy (LDP)</span>
-                <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">ZKP Audit Trailing</span>
-                <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
-              </div>
-            </div>
+            {/* Federated Learner Properties */}
+            {selectedNode.type === 'federatedLearner' && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Configuration Profile</h4>
+                  <div className="bg-slate-950 border border-slate-800 rounded p-2 text-sm text-violet-300 font-mono">
+                    CAL 4 (Decentralized National & Cross-Border)
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Privacy Controls</h4>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-300">Homomorphic Encryption (HE)</span>
+                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-300">Local Differential Privacy (LDP)</span>
+                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-300">ZKP Audit Trailing</span>
+                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                  </div>
+                </div>
 
-            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
-              <p className="text-xs text-rose-300 leading-relaxed">
-                <strong className="text-rose-400">Warning:</strong> Raw transaction data never leaves the local perimeter. Only encrypted model updates are shared with the Global AML Consortium.
-              </p>
-            </div>
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
+                  <p className="text-xs text-rose-300 leading-relaxed">
+                    <strong className="text-rose-400">Warning:</strong> Raw transaction data never leaves the local perimeter. Only encrypted model updates are shared with the Global AML Consortium.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Cost Arbitrage Properties */}
+            {selectedNode.type === 'tokenBudget' && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Financial Token Bucket</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Daily Budget (INR ₹)</label>
+                      <input 
+                        type="number" 
+                        value={selectedNode.data.budget as string || '10.00'}
+                        onChange={(e) => {
+                          setNodes(nds => nds.map(n => {
+                            if (n.id === selectedNode.id) {
+                              return { ...n, data: { ...n.data, budget: e.target.value } };
+                            }
+                            return n;
+                          }));
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Fallback Model (Graceful Degradation)</label>
+                      <select 
+                        value={selectedNode.data.fallbackModel as string || 'llama-3-8b-local'}
+                        onChange={(e) => {
+                          setNodes(nds => nds.map(n => {
+                            if (n.id === selectedNode.id) {
+                              return { ...n, data: { ...n.data, fallbackModel: e.target.value } };
+                            }
+                            return n;
+                          }));
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-300 focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="llama-3-8b-local">Llama 3 (8B) Local</option>
+                        <option value="gemini-flash">Gemini Flash (Free Tier)</option>
+                        <option value="phi-3-mini">Phi-3 Mini</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <p className="text-xs text-emerald-300 leading-relaxed">
+                    If accumulated spend exceeds 95% of the daily budget, requests will be automatically routed to the Fallback Model to prevent wallet draining.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Semantic Firewall Properties */}
+            {selectedNode.type === 'semanticFirewall' && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">IronClaw Defense</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Trust Score Threshold (0-100)</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max="100"
+                        value={selectedNode.data.threshold as string || '85'}
+                        onChange={(e) => {
+                          setNodes(nds => nds.map(n => {
+                            if (n.id === selectedNode.id) {
+                              return { ...n, data: { ...n.data, threshold: e.target.value } };
+                            }
+                            return n;
+                          }));
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-rose-400 font-mono focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
+                  <p className="text-xs text-rose-300 leading-relaxed">
+                    Requests scoring below this threshold based on entropy, prompt length, and jailbreak heuristics will be blocked with a SecurityViolation.
+                  </p>
+                </div>
+              </>
+            )}
+
           </div>
         </aside>
       )}

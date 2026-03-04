@@ -26,3 +26,4 @@ reqwest = { version = "0.12", features = ["json"] }
 itt_memory = { path = "../itt_memory" }
 itt_privacy = { path = "../itt_privacy" }
 itt_intent = { path = "../itt_intent" }
+itt_federation = { path = "../itt_federation" }

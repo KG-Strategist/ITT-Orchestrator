@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Activity, ArrowDownRight, TrendingDown, Target, ShieldCheck, Zap } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { api } from '../api/client';
 
-const data = [
+const initialData = [
   { time: '00:00', gvs: 600 },
   { time: '04:00', gvs: 580 },
   { time: '08:00', gvs: 450 },
@@ -14,17 +15,57 @@ const data = [
 
 const GVSCalculator: React.FC = () => {
   const [currentGvs, setCurrentGvs] = useState(600);
+  const [chartData, setChartData] = useState(initialData);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const fetchGvs = async () => {
+    // Connect to the real-time telemetry socket
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/v1/agent-socket`;
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('Connected to GVS Telemetry Stream');
+      // Request initial GVS state if needed
+      ws.send(JSON.stringify({ action: 'subscribe_gvs' }));
+    };
+
+    ws.onmessage = async (event) => {
       try {
-        const data = await api.get<{gvs: number}>('/gvs/current');
-        if (data && data.gvs) setCurrentGvs(data.gvs);
+        let textData = event.data;
+        if (event.data instanceof Blob) {
+          textData = await event.data.text();
+        }
+        
+        const data = JSON.parse(textData);
+        if (data.type === 'gvs_update' && typeof data.gvs === 'number') {
+          setCurrentGvs(data.gvs);
+          
+          // Update chart data dynamically
+          setChartData(prev => {
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            const newData = [...prev.slice(1), { time: timeStr, gvs: data.gvs }];
+            return newData;
+          });
+        }
       } catch (e) {
-        console.error("Failed to fetch GVS", e);
+        console.error('Failed to parse GVS telemetry', e);
       }
     };
-    fetchGvs();
+
+    ws.onerror = (error) => {
+      console.error('GVS WebSocket error:', error);
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
   }, []);
 
   return (
@@ -47,7 +88,7 @@ const GVSCalculator: React.FC = () => {
             </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorGvs" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>

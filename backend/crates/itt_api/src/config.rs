@@ -14,7 +14,7 @@ pub struct Config {
 
     // Database: Neo4j
     pub neo4j_uri: String,
-    pub neo4j_username: String,
+    pub neo4j_user: String,
     pub neo4j_password: String,
 
     // Security
@@ -76,7 +76,7 @@ impl Config {
             // Neo4j
             neo4j_uri: env::var("NEO4J_URI")
                 .unwrap_or_else(|_| "bolt://localhost:7687".to_string()),
-            neo4j_username: env::var("NEO4J_USERNAME")
+            neo4j_user: env::var("NEO4J_USERNAME")
                 .unwrap_or_else(|_| "neo4j".to_string()),
             neo4j_password: env::var("NEO4J_PASSWORD")
                 .unwrap_or_else(|_| "neo4j".to_string()),

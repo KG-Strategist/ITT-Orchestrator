@@ -3,8 +3,12 @@
 //! Identity Provider (IdP) plugin system supporting standard SSO (SAML 2.0 / OIDC).
 //! Strict Role-Based Access Control (RBAC) supporting Privileged Access Management (PAM).
 
+pub mod models;
+
 use tracing::{info, error, instrument};
 use std::fmt;
+use mongodb::{Client, Collection, bson::{doc, Document}};
+use models::{User, Tenant, Role};
 
 /// Custom Error enum for Identity operations
 #[derive(Debug)]
@@ -12,6 +16,7 @@ pub enum IdentityError {
     AuthenticationFailed(String),
     Forbidden(String), // Maps to HTTP 403
     ProviderError(String),
+    DatabaseError(String),
 }
 
 impl fmt::Display for IdentityError {
@@ -20,69 +25,92 @@ impl fmt::Display for IdentityError {
             IdentityError::AuthenticationFailed(msg) => write!(f, "401 Unauthorized: {}", msg),
             IdentityError::Forbidden(msg) => write!(f, "403 Forbidden: {}", msg),
             IdentityError::ProviderError(msg) => write!(f, "IdP Error: {}", msg),
+            IdentityError::DatabaseError(msg) => write!(f, "DB Error: {}", msg),
         }
     }
 }
 
 impl std::error::Error for IdentityError {}
 
-/// Identity Middleware integrating with standard OIDC/SAML 2.0 providers.
+/// Identity Middleware integrating with standard OIDC/SAML 2.0 providers via MongoDB.
 pub struct IdentityMiddleware {
-    pub provider_type: String, // e.g., "OIDC", "SAML2"
-    pub issuer_url: String,
+    users_collection: Collection<User>,
+    tenants_collection: Collection<Tenant>,
 }
 
 impl IdentityMiddleware {
-    pub fn new(provider_type: &str, issuer_url: &str) -> Self {
-        Self {
-            provider_type: provider_type.to_string(),
-            issuer_url: issuer_url.to_string(),
-        }
+    pub async fn new(uri: &str, db_name: &str) -> Result<Self, mongodb::error::Error> {
+        let client = Client::with_uri_str(uri).await?;
+        let db = client.database(db_name);
+        Ok(Self {
+            users_collection: db.collection::<User>("users"),
+            tenants_collection: db.collection::<Tenant>("tenants"),
+        })
     }
 
     /// Authenticates an incoming operational user request.
     #[instrument(name = "IdentityMiddleware::authenticate", skip(self, token))]
-    pub async fn authenticate(&self, token: &str) -> Result<String, IdentityError> {
-        // Simulated token validation against Azure AD / PingIdentity
-        if token.is_empty() || token == "invalid_token" {
-            error!("Authentication failed: Invalid token.");
-            return Err(IdentityError::AuthenticationFailed("Invalid or expired token".into()));
+    pub async fn authenticate(&self, token: &str) -> Result<User, IdentityError> {
+        // In a real implementation, validate the token (e.g., JWT) and extract user info.
+        // For this refactor, we simulate extracting a username from the token.
+        let username = if token == "admin_token" {
+            "admin"
+        } else {
+            "operator"
+        };
+
+        let filter = doc! { "username": username, "is_active": true };
+        let user = self.users_collection.find_one(filter, None).await
+            .map_err(|e| IdentityError::DatabaseError(e.to_string()))?;
+
+        match user {
+            Some(u) => {
+                info!("User {} authenticated successfully", u.username);
+                Ok(u)
+            }
+            None => {
+                error!("Authentication failed: User not found or inactive.");
+                Err(IdentityError::AuthenticationFailed("Invalid or expired token".into()))
+            }
         }
-        
-        info!("User authenticated successfully via {}", self.provider_type);
-        // Returns the authenticated user's assigned role
-        Ok("role_operator".to_string()) 
     }
 }
 
-/// Strict RBAC Manager evaluating requests against PAM policies.
-pub struct RBACManager;
+/// Strict RBAC Manager evaluating requests against PAM policies stored in MongoDB.
+pub struct RBACManager {
+    roles_collection: Collection<Role>,
+}
 
 impl RBACManager {
+    pub async fn new(uri: &str, db_name: &str) -> Result<Self, mongodb::error::Error> {
+        let client = Client::with_uri_str(uri).await?;
+        let db = client.database(db_name);
+        Ok(Self {
+            roles_collection: db.collection::<Role>("roles"),
+        })
+    }
+
     /// Evaluates if the user has the required PAM role to execute a privileged action.
     /// Fails securely with an HTTP 403 Forbidden if unauthorized.
     #[instrument(name = "RBACManager::evaluate_pam_policy", skip(self))]
-    pub fn evaluate_pam_policy(&self, user_role: &str, required_role: &str) -> Result<(), IdentityError> {
-        // Strict hierarchy check (simplified for demonstration)
-        let is_authorized = match (user_role, required_role) {
-            ("role_super_admin", _) => true,
-            ("role_pam_admin", "role_operator") => true,
-            ("role_pam_admin", "role_pam_admin") => true,
-            ("role_operator", "role_operator") => true,
-            _ => false,
-        };
+    pub async fn evaluate_pam_policy(&self, user_role: &str, required_permission: &str) -> Result<(), IdentityError> {
+        let filter = doc! { "name": user_role };
+        let role = self.roles_collection.find_one(filter, None).await
+            .map_err(|e| IdentityError::DatabaseError(e.to_string()))?;
 
-        if !is_authorized {
-            error!(
-                "PAM Policy Violation: User with role '{}' attempted to access resource requiring '{}'.",
-                user_role, required_role
-            );
-            return Err(IdentityError::Forbidden(
-                "PAM Policy Violation: Insufficient privileges to alter master configuration.".into()
-            ));
+        if let Some(r) = role {
+            if r.permissions.contains(&required_permission.to_string()) || r.permissions.contains(&"*".to_string()) {
+                info!("PAM Policy check passed for role {}.", user_role);
+                return Ok(());
+            }
         }
 
-        info!("PAM Policy check passed.");
-        Ok(())
+        error!(
+            "PAM Policy Violation: User with role '{}' attempted to access resource requiring '{}'.",
+            user_role, required_permission
+        );
+        Err(IdentityError::Forbidden(
+            "PAM Policy Violation: Insufficient privileges to alter configuration.".into()
+        ))
     }
 }

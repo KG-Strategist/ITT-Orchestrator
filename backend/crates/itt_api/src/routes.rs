@@ -6,6 +6,28 @@ use crate::AppState;
 use uuid::Uuid;
 use itt_memory::models::{ApiRegistryEntry, Zone, MdmRule};
 use serde_json::json;
+use itt_federation::gvm::GvmEngine;
+
+/// POST /api/v1/gvm/manifest
+pub async fn post_gvm_manifest(
+    State(_state): State<Arc<AppState>>,
+    body: String,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    tracing::info!("Received GVM Manifest payload");
+    
+    match GvmEngine::process_manifest(&body).await {
+        Ok(msg) => {
+            Ok((StatusCode::OK, Json(json!({ "status": "success", "message": msg }))))
+        }
+        Err(e) => {
+            tracing::error!("GVM Error: {:?}", e);
+            Err(ApiError::BadRequest {
+                message: format!("{:?}", e),
+                details: None,
+            })
+        }
+    }
+}
 
 /// GET /api/v1/registry
 /// Fetches the auto-discovered APIs

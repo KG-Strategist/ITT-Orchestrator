@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, User, KeyRound, AlertCircle, Server } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, CoERole } from '../store/authStore';
 import { api, apiEndpoints } from '../api/client';
 
 const Login: React.FC = () => {
@@ -19,7 +19,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await api.post<{token: string, user: unknown}>(apiEndpoints.auth.login, { username, password });
+      const response = await api.post<{token: string, user: {id: string, username: string, name: string, role: CoERole}}>(apiEndpoints.auth.login, { username, password });
       
       if (response && response.token && response.user) {
         login(response.user, response.token);

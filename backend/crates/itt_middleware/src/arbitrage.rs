@@ -9,11 +9,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn, error, instrument};
 
+use crate::error::AppError;
+
 /// Represents a financial token bucket for an agent or tenant.
 #[derive(Debug, Clone)]
 pub struct FinancialTokenBucket {
-    pub current_spend: f64,
-    pub max_budget: f64,
+    pub accumulated_spend_inr: f64,
+    pub daily_budget_inr: f64,
 }
 
 /// The Cost Arbitrage Middleware for Zone 4.
@@ -29,43 +31,68 @@ impl Zone4CostArbitrage {
     }
 
     /// Allocates a budget for a specific tenant or agent.
-    pub async fn allocate_budget(&self, tenant_id: &str, budget: f64) {
+    pub async fn allocate_budget(&self, tenant_id: &str, budget_inr: f64) {
         let mut budgets = self.budgets.lock().await;
         budgets.insert(tenant_id.to_string(), FinancialTokenBucket {
-            current_spend: 0.0,
-            max_budget: budget,
+            accumulated_spend_inr: 0.0,
+            daily_budget_inr: budget_inr,
         });
     }
 
     /// Evaluates the cost of an intent and routes to the appropriate model.
-    /// Triggers Graceful Degradation if the budget is exhausted.
-    #[instrument(name = "CostArbitrage::evaluate_and_route", skip(self, tenant_id, estimated_cost))]
-    pub async fn evaluate_and_route(&self, tenant_id: &str, estimated_cost: f64) -> Result<String, String> {
+    /// Triggers Graceful Degradation if the budget is >95% exhausted.
+    #[instrument(name = "CostArbitrage::evaluate_and_route", skip(self, tenant_id, estimated_cost_inr))]
+    pub async fn evaluate_and_route(
+        &self, 
+        tenant_id: &str, 
+        estimated_cost_inr: f64,
+        requested_model: &str,
+        fallback_model: &str
+    ) -> Result<String, AppError> {
         let mut budgets = self.budgets.lock().await;
         
         if let Some(bucket) = budgets.get_mut(tenant_id) {
-            if bucket.current_spend + estimated_cost > bucket.max_budget {
+            let new_spend = bucket.accumulated_spend_inr + estimated_cost_inr;
+            
+            // Hard limit: 100% exhaustion
+            if new_spend >= bucket.daily_budget_inr {
+                error!(
+                    tenant_id = %tenant_id,
+                    current_spend = %bucket.accumulated_spend_inr,
+                    max_budget = %bucket.daily_budget_inr,
+                    "Financial Token Bucket fully exhausted. Returning 402 Circuit Breaker."
+                );
+                return Err(AppError::RateLimitExceeded(
+                    format!("Wallet Drained: Daily budget of ₹{} exceeded.", bucket.daily_budget_inr)
+                ));
+            }
+
+            // Graceful Degradation: >95% exhaustion
+            let exhaustion_ratio = new_spend / bucket.daily_budget_inr;
+            if exhaustion_ratio > 0.95 {
                 warn!(
                     tenant_id = %tenant_id,
-                    current_spend = %bucket.current_spend,
-                    max_budget = %bucket.max_budget,
-                    "Financial Token Bucket exhausted. Triggering Graceful Degradation."
+                    exhaustion_ratio = %exhaustion_ratio,
+                    "Budget >95% exhausted. Triggering Graceful Degradation to SLM."
                 );
-                // Graceful Degradation: Route to a free internal SLM
-                return Ok("internal-slm-v5-free".to_string());
-            } else {
-                bucket.current_spend += estimated_cost;
-                info!(
-                    tenant_id = %tenant_id,
-                    new_spend = %bucket.current_spend,
-                    "Budget approved. Routing to Frontier LLM."
-                );
-                // Route to the requested Frontier LLM
-                return Ok("frontier-llm-gpt4o".to_string());
+                bucket.accumulated_spend_inr = new_spend;
+                return Ok(fallback_model.to_string());
             }
+
+            // Normal routing
+            bucket.accumulated_spend_inr = new_spend;
+            info!(
+                tenant_id = %tenant_id,
+                new_spend = %bucket.accumulated_spend_inr,
+                "Budget approved. Routing to requested model."
+            );
+            return Ok(requested_model.to_string());
         }
         
         error!("Tenant {} not found in budget registry. Returning 402 Circuit Breaker.", tenant_id);
-        Err("402 Payment Required: No financial token budget allocated for this tenant.".to_string())
+        Err(AppError::RateLimitExceeded(
+            "402 Payment Required: No financial token budget allocated for this tenant.".to_string()
+        ))
     }
 }
+

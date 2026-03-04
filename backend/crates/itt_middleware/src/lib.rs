@@ -3,16 +3,20 @@
 //! This crate implements the core middleware for Zone 4 (The Cognitive Edge)
 //! of the Adaptive Gateway Fabric (AGF), adhering to the SEAG specifications.
 
+pub mod error;
+pub mod privacy;
 pub mod gvm;
 pub mod firewall;
 pub mod arbitrage;
 pub mod toon;
+pub mod polyglot;
 
 // Re-exporting the modules for easier access
 pub use gvm::{VirtualTrustZone, ConnectivityRequest};
 pub use firewall::{Zone4SemanticFirewall, RealTimeTrustScore};
 pub use arbitrage::{Zone4CostArbitrage, FinancialTokenBucket};
 pub use toon::ToonTransformer;
+pub use polyglot::Iso8583Transcoder;
 
 /// MELT Observability (OpenTelemetry)
 ///

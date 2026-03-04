@@ -29,6 +29,7 @@ pub struct AppState {
     pub intent: Arc<TinyTransformer>,
     pub jwt_manager: Arc<auth::JwtManager>,
     pub rate_limiter: Arc<rate_limit::RateLimiter>,
+    pub melt_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
 }
 
 #[tokio::main]
@@ -70,8 +71,24 @@ async fn main() {
     tracing::info!("Rate limiter initialized: {} req/min per IP", config.rate_limit_per_minute);
 
     // Initialize Core Engines
-    let vector_store = Arc::new(MongoClient);
-    let graph_store = Arc::new(Neo4jClient::new());
+    let vector_store = Arc::new(MongoClient::new(
+        &config.mongodb_uri,
+        &config.mongodb_database,
+        "embeddings"
+    ).await.expect("Failed to connect to MongoDB"));
+    let graph_store = match Neo4jClient::new(
+        &config.neo4j_uri,
+        &config.neo4j_user,
+        &config.neo4j_password
+    ).await {
+        Ok(client) => Arc::new(client),
+        Err(e) => {
+            tracing::warn!("Failed to connect to Neo4j: {}. Using fallback/mock if applicable.", e);
+            // For this specific build, if neo4j fails, we might want to just panic or use a mock.
+            // Since we removed the mock, let's panic to ensure the environment is set up correctly.
+            panic!("Neo4j connection is required: {}", e);
+        }
+    };
     
     let corpus_manager = Arc::new(CorpusManager::new(
         vector_store,
@@ -87,6 +104,8 @@ async fn main() {
     let hygiene_worker = SelfHygieneWorker::new(Duration::from_secs(3600), corpus_manager.clone());
     hygiene_worker.start_daemon().await;
 
+    let (melt_tx, _) = tokio::sync::broadcast::channel(100);
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         memory: corpus_manager.clone(),
@@ -94,6 +113,7 @@ async fn main() {
         intent: intent_engine,
         jwt_manager: jwt_manager.clone(),
         rate_limiter: rate_limiter.clone(),
+        melt_tx,
     });
 
     if std::env::var("TEST_MODE").unwrap_or_default() == "true" {
@@ -109,6 +129,7 @@ async fn main() {
         .route("/mdm/rules", get(routes::get_mdm_rules).post(routes::post_mdm_rule))
         .route("/mdm/rules/:id", delete(routes::delete_mdm_rule))
         .route("/generate-dag", post(routes::post_generate_dag))
+        .route("/gvm/manifest", post(routes::post_gvm_manifest))
         .route("/health", get(health_check))
         .route("/readiness", get(readiness_check))
         .route_layer(from_fn(middleware::governance_guardrails))
@@ -117,7 +138,8 @@ async fn main() {
     // Public/Socket Routes
     let app = Router::new()
         .nest("/api/v1", api_routes)
-        .route("/v1/agent-socket", get(socket::agent_socket_handler));
+        .route("/v1/agent-socket", get(socket::agent_socket_handler))
+        .with_state(app_state);
 
     let addr = format!("{}:{}", "0.0.0.0", config.port);
     

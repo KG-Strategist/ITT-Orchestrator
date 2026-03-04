@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileJson, Play, Save, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { api } from '../api/client';
 
 const IntentManifests: React.FC = () => {
   const [yamlContent, setYamlContent] = useState(`apiVersion: seag.itt-orchestrator.com/v1alpha1

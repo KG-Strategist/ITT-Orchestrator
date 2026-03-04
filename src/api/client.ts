@@ -152,6 +152,9 @@ export const apiEndpoints = {
   dag: {
     generate: '/generate-dag',
   },
+  gvm: {
+    manifest: '/gvm/manifest',
+  },
   health: {
     live: '/health',
     ready: '/readiness',

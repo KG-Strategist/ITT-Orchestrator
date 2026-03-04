@@ -60,7 +60,7 @@ export const useOrchestratorStore = create<OrchestratorState>()(
 
       fetchIntegrations: async () => {
         try {
-          const data = await api.get(apiEndpoints.integrations.list);
+          const data = await api.get<Integration[]>(apiEndpoints.integrations.list);
           set({ integrations: data });
         } catch (e) {
           console.error("Failed to fetch integrations", e);
@@ -69,7 +69,7 @@ export const useOrchestratorStore = create<OrchestratorState>()(
 
       fetchApiRegistry: async () => {
         try {
-          const data = await api.get(apiEndpoints.registry.list);
+          const data = await api.get<API_Registry_Object[]>(apiEndpoints.registry.list);
           set({ apiRegistry: data });
         } catch (e) {
           console.error("Failed to fetch registry", e);
@@ -109,7 +109,7 @@ export const useOrchestratorStore = create<OrchestratorState>()(
 
       generateAgentDAG: async (prompt) => {
         try {
-          const response = await api.post(apiEndpoints.dag.generate, { prompt });
+          const response = await api.post<{ nodes: Agent_DAG_Node[], edges: Agent_DAG_Edge[], fallbackMessage?: string }>(apiEndpoints.dag.generate, { prompt });
           return response;
         } catch (e) {
           console.error("Failed to generate DAG", e);
