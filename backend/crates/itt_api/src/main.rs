@@ -18,7 +18,7 @@ use axum::{
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use itt_memory::{CorpusManager, MilvusClient, Neo4jClient};
+use itt_memory::{CorpusManager, MongoClient, Neo4jClient};
 use itt_privacy::{TokenizationEngine, SelfHygieneWorker};
 use itt_intent::TinyTransformer;
 
@@ -70,7 +70,7 @@ async fn main() {
     tracing::info!("Rate limiter initialized: {} req/min per IP", config.rate_limit_per_minute);
 
     // Initialize Core Engines
-    let vector_store = Arc::new(MilvusClient);
+    let vector_store = Arc::new(MongoClient);
     let graph_store = Arc::new(Neo4jClient::new());
     
     let corpus_manager = Arc::new(CorpusManager::new(
@@ -79,7 +79,8 @@ async fn main() {
         Duration::from_secs(600), // 10 min cache TTL
     ));
 
-    let privacy_engine = Arc::new(TokenizationEngine::new("vault-key-ref-mock"));
+    let vault_key_ref = std::env::var("VAULT_KEY_REF").unwrap_or_else(|_| "default-vault-key-ref".to_string());
+    let privacy_engine = Arc::new(TokenizationEngine::new(&vault_key_ref));
     let intent_engine = Arc::new(TinyTransformer::new("v1.0.0-tiny"));
 
     // Start Self-Hygiene Daemon
@@ -120,12 +121,25 @@ async fn main() {
 
     let addr = format!("{}:{}", "0.0.0.0", config.port);
     
-    let listener = TcpListener::bind(&addr).await.unwrap();
-    tracing::info!("🚀 Control Plane listening on http://{}", listener.local_addr().unwrap());
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("Failed to bind to address {}: {}", addr, e);
+            std::process::exit(1);
+        }
+    };
+    
+    match listener.local_addr() {
+        Ok(local_addr) => tracing::info!("🚀 Control Plane listening on http://{}", local_addr),
+        Err(e) => tracing::warn!("🚀 Control Plane listening on {}, but failed to get local address: {}", addr, e),
+    }
     tracing::info!("📊 Environment: {}", config.node_env);
     tracing::info!("⚡ Rate limiting: {} requests/min", config.rate_limit_per_minute);
 
-    axum::serve(listener, app).await.unwrap();
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("Server error: {}", e);
+        std::process::exit(1);
+    }
 }
 
 /// Health check endpoint for k8s liveness probe

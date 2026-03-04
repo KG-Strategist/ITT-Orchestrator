@@ -19,16 +19,20 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response: any = await api.post(apiEndpoints.auth.login, { username, password });
+      const response = await api.post<{token: string, user: unknown}>(apiEndpoints.auth.login, { username, password });
       
-      if (response.token && response.user) {
+      if (response && response.token && response.user) {
         login(response.user, response.token);
         navigate('/dashboard/executive');
       } else {
         setError('Invalid response from server');
       }
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Authentication failed. Please check your credentials.');
+      } else {
+        setError('Authentication failed. Please check your credentials.');
+      }
     } finally {
       setIsLoading(false);
     }

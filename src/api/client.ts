@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 /**
  * API Response wrapper for consistent error/success handling
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -94,27 +94,27 @@ export const apiClient = createApiClient();
  * Helper functions for common operations
  */
 export const api = {
-  get: async <T = any>(url: string): Promise<T> => {
+  get: async <T = unknown>(url: string): Promise<T> => {
     const response = await apiClient.get<T>(url);
     return response.data;
   },
 
-  post: async <T = any>(url: string, data?: any): Promise<T> => {
+  post: async <T = unknown, D = unknown>(url: string, data?: D): Promise<T> => {
     const response = await apiClient.post<T>(url, data);
     return response.data;
   },
 
-  put: async <T = any>(url: string, data?: any): Promise<T> => {
+  put: async <T = unknown, D = unknown>(url: string, data?: D): Promise<T> => {
     const response = await apiClient.put<T>(url, data);
     return response.data;
   },
 
-  patch: async <T = any>(url: string, data?: any): Promise<T> => {
+  patch: async <T = unknown, D = unknown>(url: string, data?: D): Promise<T> => {
     const response = await apiClient.patch<T>(url, data);
     return response.data;
   },
 
-  delete: async <T = any>(url: string): Promise<T> => {
+  delete: async <T = unknown>(url: string): Promise<T> => {
     const response = await apiClient.delete<T>(url);
     return response.data;
   },

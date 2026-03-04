@@ -29,7 +29,7 @@ export interface Agent_DAG_Node {
   id: string;
   type: string;
   position: { x: number; y: number };
-  data: any;
+  data: Record<string, unknown>;
 }
 
 export interface Agent_DAG_Edge {
@@ -37,7 +37,7 @@ export interface Agent_DAG_Edge {
   source: string;
   target: string;
   animated?: boolean;
-  style?: any;
+  style?: Record<string, unknown>;
 }
 
 interface OrchestratorState {
@@ -79,13 +79,17 @@ export const useOrchestratorStore = create<OrchestratorState>()(
       addIntegration: async (integrationData) => {
         set({ isScanning: true });
         try {
-          const response = await api.post(apiEndpoints.integrations.list, integrationData);
+          const response = await api.post<{ id: string, status: string, message: string }>(apiEndpoints.integrations.list, integrationData);
           
-          set((state) => ({
-            integrations: [...state.integrations, response.integration],
-            apiRegistry: [...state.apiRegistry, ...response.discoveredApis],
+          // Fetch the updated registry and integrations from the backend
+          const updatedRegistry = await api.get<API_Registry_Object[]>(apiEndpoints.registry.list);
+          const updatedIntegrations = await api.get<Integration[]>(apiEndpoints.integrations.list);
+
+          set({
+            integrations: updatedIntegrations,
+            apiRegistry: updatedRegistry,
             isScanning: false
-          }));
+          });
         } catch (e) {
           console.error("Failed to add integration", e);
           set({ isScanning: false });

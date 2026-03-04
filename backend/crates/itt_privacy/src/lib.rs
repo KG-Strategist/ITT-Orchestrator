@@ -22,7 +22,7 @@ impl TokenizationEngine {
         let mut masked = raw_payload.to_string();
         
         // Regex for Aadhaar (12 digits, optional dashes)
-        let aadhaar_re = Regex::new(r"\b\d{4}-\d{4}-\d{4}\b").unwrap();
+        let aadhaar_re = Regex::new(r"\b\d{4}-\d{4}-\d{4}\b").map_err(|e| format!("Invalid regex: {}", e))?;
         masked = aadhaar_re.replace_all(&masked, |caps: &regex::Captures| {
             let hash = hex::encode(Sha256::digest(caps[0].as_bytes()));
             info!("PII Detected: Aadhaar tokenized cryptographically.");
@@ -30,7 +30,7 @@ impl TokenizationEngine {
         }).to_string();
 
         // Regex for PAN (5 letters, 4 digits, 1 letter)
-        let pan_re = Regex::new(r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b").unwrap();
+        let pan_re = Regex::new(r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b").map_err(|e| format!("Invalid regex: {}", e))?;
         masked = pan_re.replace_all(&masked, |caps: &regex::Captures| {
             let hash = hex::encode(Sha256::digest(caps[0].as_bytes()));
             info!("PII Detected: PAN tokenized cryptographically.");

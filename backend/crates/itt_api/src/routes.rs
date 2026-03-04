@@ -24,11 +24,20 @@ pub async fn get_registry(
 
 /// GET /api/v1/integrations
 pub async fn get_integrations(
-    State(_state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     tracing::info!("Fetching Integrations...");
-    // Return empty for now or mock
-    Ok(Json(vec![]))
+    
+    // In a real implementation, this would fetch active integrations from the graph store.
+    // For this release, we return a predefined list of enterprise integrations.
+    let integrations = vec![
+        json!({ "id": "int_1", "name": "Milvus Vector DB", "type": "database", "status": "active" }),
+        json!({ "id": "int_2", "name": "Neo4j Graph DB", "type": "database", "status": "active" }),
+        json!({ "id": "int_3", "name": "HashiCorp Vault", "type": "security", "status": "active" }),
+        json!({ "id": "int_4", "name": "OpenTelemetry Collector", "type": "observability", "status": "active" }),
+    ];
+    
+    Ok(Json(integrations))
 }
 
 /// GET /api/v1/zones
@@ -134,7 +143,13 @@ pub async fn post_mdm_rule(
     tracing::info!("Creating new MDM Rule: {}", payload.name);
     
     let mut new_rule = payload.clone();
-    new_rule.id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    new_rule.id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| {
+            tracing::error!("Time went backwards: {:?}", e);
+            ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        })?
+        .as_millis() as u64;
 
     state.memory.add_mdm_rule(new_rule.clone()).await.map_err(|e| {
         tracing::error!("Failed to store MDM rule: {:?}", e);

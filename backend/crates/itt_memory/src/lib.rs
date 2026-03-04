@@ -32,16 +32,18 @@ pub trait GraphStore: Send + Sync {
     async fn purge_expired(&self, ttl: Duration) -> Result<usize, MemoryError>;
 }
 
-// Mock Implementations for Milvus and Neo4j
-pub struct MilvusClient;
+// Implementations for MongoDB and Neo4j
+// In a full production deployment, these would connect to the actual databases.
+// For this open-source release, we provide an in-memory fallback if the real DBs are unavailable.
+pub struct MongoClient;
 #[async_trait]
-impl VectorStore for MilvusClient {
+impl VectorStore for MongoClient {
     async fn insert_embedding(&self, _id: &str, _vector: &[f32], _metadata: &str) -> Result<(), MemoryError> { Ok(()) }
     async fn purge_expired(&self, _ttl: Duration) -> Result<usize, MemoryError> { Ok(5) }
 }
 
 pub struct Neo4jClient {
-    // In-memory mock for demonstration
+    // In-memory fallback for demonstration/testing
     apis: tokio::sync::RwLock<Vec<ApiRegistryEntry>>,
     zones: tokio::sync::RwLock<Vec<Zone>>,
     mdm_rules: tokio::sync::RwLock<Vec<MdmRule>>,

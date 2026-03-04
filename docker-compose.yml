@@ -32,8 +32,12 @@ services:
     environment:
       NEO4J_AUTH: neo4j/neo4jpass
       NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
     volumes:
       - neo4j_data:/var/lib/neo4j/data
+      - ./docker/neo4j-init.cypher:/var/lib/neo4j/import/neo4j-init.cypher
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
       interval: 10s
@@ -58,6 +62,46 @@ services:
     networks:
       - itt-network
 
+  # Open Policy Agent (OPA)
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: itt_opa
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--log-level=debug"
+    networks:
+      - itt-network
+
+  # HashiCorp Vault
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: itt_vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - itt-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: itt_otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./docker/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - itt-network
+
   # Rust Backend API
   backend:
     build:
@@ -73,6 +117,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      vault:
+        condition: service_started
+      opa:
+        condition: service_started
+      otel-collector:
+        condition: service_started
     environment:
       PORT: "3001"
       NODE_ENV: development

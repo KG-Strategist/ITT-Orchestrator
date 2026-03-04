@@ -25,13 +25,17 @@ spec:
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     setStatus('idle');
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await api.post('/manifests', { manifest: yamlContent });
       setStatus('success');
-    }, 1500);
+    } catch (e) {
+      setStatus('error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

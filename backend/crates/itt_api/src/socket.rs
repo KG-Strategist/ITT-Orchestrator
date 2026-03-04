@@ -49,7 +49,13 @@ async fn handle_socket(socket: WebSocket) {
                                 
                                 for log in logs {
                                     sleep(Duration::from_millis(800)).await;
-                                    let log_bytes = serde_json::to_vec(&log).unwrap();
+                                    let log_bytes = match serde_json::to_vec(&log) {
+                                        Ok(bytes) => bytes,
+                                        Err(e) => {
+                                            tracing::error!("Failed to serialize log message: {}", e);
+                                            continue;
+                                        }
+                                    };
                                     if sender.send(Message::Binary(log_bytes)).await.is_err() {
                                         tracing::info!("AgentSocket disconnected during MELT stream.");
                                         break;

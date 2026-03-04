@@ -1,4 +1,6 @@
-// Initialize MongoDB collections and indexes
+// MongoDB Initialization Script
+// This script runs when the MongoDB container starts for the first time.
+
 db = db.getSiblingDB('itt_orchestrator');
 
 // Create collections
@@ -6,34 +8,19 @@ db.createCollection('api_registry');
 db.createCollection('zones');
 db.createCollection('mdm_rules');
 db.createCollection('integrations');
-db.createCollection('audit_logs');
-db.createCollection('user_sessions');
-db.createCollection('compliance_records');
+db.createCollection('embeddings');
 
-// Create indexes for performance
-db.api_registry.createIndex({ id: 1 }, { unique: true });
-db.api_registry.createIndex({ name: 1 });
-db.api_registry.createIndex({ createdAt: 1 }, { expireAfterSeconds: 7776000 }); // 90 days
+// Create indexes for efficient querying
+db.api_registry.createIndex({ "id": 1 }, { unique: true });
+db.api_registry.createIndex({ "category": 1 });
+db.api_registry.createIndex({ "status": 1 });
 
-db.zones.createIndex({ id: 1 }, { unique: true });
-db.zones.createIndex({ name: 1 });
+db.zones.createIndex({ "id": 1 }, { unique: true });
+db.mdm_rules.createIndex({ "id": 1 }, { unique: true });
 
-db.mdm_rules.createIndex({ id: 1 }, { unique: true });
-db.mdm_rules.createIndex({ name: 1 });
+// For embeddings (if using MongoDB as a vector store fallback)
+// Note: MongoDB Community Edition supports standard indexes.
+// Atlas supports vector search, but for community, we just store the vectors.
+db.embeddings.createIndex({ "id": 1 }, { unique: true });
 
-db.integrations.createIndex({ id: 1 }, { unique: true });
-db.integrations.createIndex({ createdAt: 1 });
-
-db.audit_logs.createIndex({ timestamp: 1 });
-db.audit_logs.createIndex({ userId: 1 });
-db.audit_logs.createIndex({ action: 1 });
-db.audit_logs.createIndex({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // Auto-delete after 90 days
-
-db.user_sessions.createIndex({ sessionId: 1 }, { unique: true });
-db.user_sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
-
-db.compliance_records.createIndex({ timestamp: 1 });
-db.compliance_records.createIndex({ policyName: 1 });
-db.compliance_records.createIndex({ timestamp: 1 }, { expireAfterSeconds: 31536000 }); // 1 year for compliance
-
-print('MongoDB initialization complete!');
+print("MongoDB initialization complete. Collections and indexes created.");

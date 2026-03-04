@@ -16,13 +16,15 @@ const GVSCalculator: React.FC = () => {
   const [currentGvs, setCurrentGvs] = useState(600);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentGvs(prev => {
-        if (prev > 10) return prev - Math.floor(Math.random() * 5);
-        return 10;
-      });
-    }, 100);
-    return () => clearInterval(timer);
+    const fetchGvs = async () => {
+      try {
+        const data = await api.get<{gvs: number}>('/gvs/current');
+        if (data && data.gvs) setCurrentGvs(data.gvs);
+      } catch (e) {
+        console.error("Failed to fetch GVS", e);
+      }
+    };
+    fetchGvs();
   }, []);
 
   return (

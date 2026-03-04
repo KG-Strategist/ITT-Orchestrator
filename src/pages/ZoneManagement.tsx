@@ -3,11 +3,23 @@ import { Network, ShieldCheck, Activity, Lock, Plus, Trash2, Server, Globe, Save
 import { useAuthStore } from '../store/authStore';
 import { api, apiEndpoints } from '../api/client';
 
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, React.ElementType> = {
   Lock, ShieldCheck, Activity, Network, Globe, Layers, ShieldAlert, BrainCircuit
 };
 
-const defaultZones = [
+interface ZoneData {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  bg: string;
+  border: string;
+  ips: string[];
+  filters: string[];
+}
+
+const defaultZones: ZoneData[] = [
   {
     id: 'zone-1',
     name: 'Zone 1: DMZ (External)',
@@ -75,8 +87,8 @@ const availableFilters = [
 
 const ZoneManagement: React.FC = () => {
   const { hasAccess } = useAuthStore();
-  const [zones, setZones] = useState<any[]>(defaultZones);
-  const [activeZone, setActiveZone] = useState<any>(defaultZones[0]);
+  const [zones, setZones] = useState<ZoneData[]>(defaultZones);
+  const [activeZone, setActiveZone] = useState<ZoneData>(defaultZones[0]);
   const [activeTab, setActiveTab] = useState<'overview' | 'nodes' | 'policies' | 'filters'>('overview');
   
   const [newIp, setNewIp] = useState('');
@@ -88,7 +100,7 @@ const ZoneManagement: React.FC = () => {
   useEffect(() => {
     const fetchZones = async () => {
       try {
-        const data: any = await api.get(apiEndpoints.zones.list);
+        const data = await api.get<ZoneData[]>(apiEndpoints.zones.list);
         if (data && data.length > 0) {
           setZones(data);
           setActiveZone(data[0]);
@@ -277,7 +289,7 @@ const ZoneManagement: React.FC = () => {
                 ].map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id as 'overview' | 'nodes' | 'policies' | 'filters')}
                     className={`pb-3 px-2 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${
                       activeTab === tab.id 
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' 
