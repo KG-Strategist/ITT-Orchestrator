@@ -3,22 +3,25 @@
 //! This crate implements the core middleware for Zone 4 (The Cognitive Edge)
 //! of the Adaptive Gateway Fabric (AGF), adhering to the SEAG specifications.
 
-pub mod error;
-pub mod privacy;
-pub mod gvm;
-pub mod firewall;
 pub mod arbitrage;
-pub mod toon;
+pub mod error;
+pub mod firewall;
+pub mod gvm;
 pub mod polyglot;
+pub mod privacy;
 pub mod secure_sandbox;
+pub mod toon;
 
 // Re-exporting the modules for easier access
-pub use gvm::{VirtualTrustZone, ConnectivityRequest};
-pub use firewall::{Zone4SemanticFirewall, RealTimeTrustScore};
-pub use arbitrage::{Zone4CostArbitrage, FinancialTokenBucket};
-pub use toon::ToonTransformer;
+pub use arbitrage::{FinancialTokenBucket, Zone4CostArbitrage};
+pub use firewall::{RealTimeTrustScore, Zone4SemanticFirewall};
+pub use gvm::{ConnectivityRequest, VirtualTrustZone};
 pub use polyglot::Iso8583Transcoder;
-pub use secure_sandbox::{SecureExecutionSandbox, SecureExecutionSandboxWithTEE, TEEAttestationProvider, NitroEnclavesAttestor, IntelSGXAttestor};
+pub use secure_sandbox::{
+    IntelSGXAttestor, NitroEnclavesAttestor, SecureExecutionSandbox, SecureExecutionSandboxWithTEE,
+    TEEAttestationProvider,
+};
+pub use toon::ToonTransformer;
 
 /// MELT Observability (OpenTelemetry)
 ///
@@ -30,12 +33,7 @@ pub mod telemetry {
 
     /// Logs the AI's specific "Chain of Thought" using OpenTelemetry tracing.
     #[instrument(name = "AgentSocket::chain_of_thought", skip(prompt, output))]
-    pub fn log_chain_of_thought(
-        prompt: &str,
-        trust_score: f32,
-        tool_selected: &str,
-        output: &str,
-    ) {
+    pub fn log_chain_of_thought(prompt: &str, trust_score: f32, tool_selected: &str, output: &str) {
         info!(
             prompt_len = prompt.len(),
             trust_score = %trust_score,

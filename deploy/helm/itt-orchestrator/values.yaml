@@ -229,7 +229,7 @@ features:
   semanticFirewall:
     enabled: true
     trustThreshold: 80.0
-  ironClawSandbox:
+  SecureExecutionSandbox:
     enabled: true
     wasmTimeout: 10000
   costArbitrage:

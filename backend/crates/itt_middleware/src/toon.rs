@@ -18,18 +18,22 @@ impl ToonTransformer {
     /// compresses it into a dense, LLM-readable text format.
     #[instrument(name = "ToonTransformer::json_to_toon", skip(json_payload))]
     pub fn json_to_toon(json_payload: &str) -> Result<String, AppError> {
-        let parsed: Value = serde_json::from_str(json_payload)
-            .map_err(|e| AppError::InternalError(format!("Failed to parse JSON for TOON conversion: {}", e)))?;
-        
+        let parsed: Value = serde_json::from_str(json_payload).map_err(|e| {
+            AppError::InternalError(format!("Failed to parse JSON for TOON conversion: {}", e))
+        })?;
+
         let toon_str = Self::flatten_value(&parsed);
-        
+
         debug!(
             original_len = json_payload.len(),
             toon_len = toon_str.len(),
-            compression_ratio = format!("{:.2}%", (1.0 - (toon_str.len() as f64 / json_payload.len() as f64)) * 100.0),
+            compression_ratio = format!(
+                "{:.2}%",
+                (1.0 - (toon_str.len() as f64 / json_payload.len() as f64)) * 100.0
+            ),
             "Transformed JSON to TOON"
         );
-        
+
         Ok(toon_str)
     }
 

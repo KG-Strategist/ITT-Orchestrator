@@ -25,7 +25,9 @@ pub trait FederatedLearner: Send + Sync {
     type Error;
 
     /// Computes localized model weight updates based on recent edge executions.
-    fn compute_local_updates(&self) -> impl Future<Output = Result<LocalModelWeights, Self::Error>> + Send;
+    fn compute_local_updates(
+        &self,
+    ) -> impl Future<Output = Result<LocalModelWeights, Self::Error>> + Send;
 
     /// Applies Local Differential Privacy (LDP) or Homomorphic Encryption (HE)
     /// to the localized weights, ensuring raw PII is never exposed.

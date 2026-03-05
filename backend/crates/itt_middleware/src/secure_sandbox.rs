@@ -11,11 +11,11 @@
 //! for AWS Nitro Enclaves and Intel SGX hardware attestation, enabling cryptographically
 //! verified code execution in physical trust anchors.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
 use tokio::sync::Mutex;
-use tracing::{info, instrument, error};
+use tracing::{error, info, instrument};
 use wasmtime::{Config, Engine, Instance, Module, Store, TypedFunc};
 
 use crate::error::AppError;
@@ -41,8 +41,9 @@ impl SecureExecutionSandbox {
         // Limit memory allocation
         config.max_wasm_stack(1024 * 1024); // 1MB stack limit
 
-        let engine = Engine::new(&config)
-            .map_err(|e| AppError::InternalError(format!("Failed to initialize Wasm engine: {}", e)))?;
+        let engine = Engine::new(&config).map_err(|e| {
+            AppError::InternalError(format!("Failed to initialize Wasm engine: {}", e))
+        })?;
 
         let engine_arc = Arc::new(engine);
         let engine_clone = engine_arc.clone();
@@ -83,10 +84,14 @@ impl SecureExecutionSandbox {
     pub fn execute_mcp_tool(&self, wasm_bytes: &[u8], input: i32) -> Result<i32, AppError> {
         let start_time = Instant::now();
 
-        info!("Compiling Wasm module ({} bytes) in Secure Execution Sandbox", wasm_bytes.len());
+        info!(
+            "Compiling Wasm module ({} bytes) in Secure Execution Sandbox",
+            wasm_bytes.len()
+        );
 
-        let module = Module::new(&self.engine, wasm_bytes)
-            .map_err(|e| AppError::InternalError(format!("Failed to compile Wasm module: {}", e)))?;
+        let module = Module::new(&self.engine, wasm_bytes).map_err(|e| {
+            AppError::InternalError(format!("Failed to compile Wasm module: {}", e))
+        })?;
 
         // Create a store with epoch interruption enabled
         let mut store = Store::new(&self.engine, ());
@@ -94,26 +99,31 @@ impl SecureExecutionSandbox {
         store.set_epoch_deadline(1);
 
         info!("Instantiating Wasm module in isolated memory space");
-        let instance = Instance::new(&mut store, &module, &[])
-            .map_err(|e| AppError::InternalError(format!("Failed to instantiate Wasm module: {}", e)))?;
+        let instance = Instance::new(&mut store, &module, &[]).map_err(|e| {
+            AppError::InternalError(format!("Failed to instantiate Wasm module: {}", e))
+        })?;
 
         // Extract the exported function
         let execute_func: TypedFunc<i32, i32> = instance
             .get_typed_func(&mut store, "execute")
-            .map_err(|e| AppError::InternalError(format!("Failed to find exported 'execute' function: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalError(format!(
+                    "Failed to find exported 'execute' function: {}",
+                    e
+                ))
+            })?;
 
         info!("Executing MCP tool with input: {}", input);
 
         // Call the WASM function; if it exceeds epoch deadline, wasmtime will error
-        let result = execute_func.call(&mut store, input)
-            .map_err(|e| {
-                let err_msg = e.to_string();
-                if err_msg.contains("epoch") || err_msg.contains("deadline") {
-                    AppError::SecurityViolation(format!("Wasm execution timeout (>10s): {}", e))
-                } else {
-                    AppError::SecurityViolation(format!("Wasm execution failed: {}", e))
-                }
-            })?;
+        let result = execute_func.call(&mut store, input).map_err(|e| {
+            let err_msg = e.to_string();
+            if err_msg.contains("epoch") || err_msg.contains("deadline") {
+                AppError::SecurityViolation(format!("Wasm execution timeout (>10s): {}", e))
+            } else {
+                AppError::SecurityViolation(format!("Wasm execution failed: {}", e))
+            }
+        })?;
 
         let execution_time_ms = start_time.elapsed().as_millis();
         info!(
@@ -373,7 +383,9 @@ impl SecureExecutionSandboxWithTEE {
 
                     // Record metric for audit trail
                     let mut metrics = self.execution_metrics.lock().await;
-                    *metrics.entry("attestation_requests".to_string()).or_insert(0) += 1;
+                    *metrics
+                        .entry("attestation_requests".to_string())
+                        .or_insert(0) += 1;
 
                     Some(quote)
                 }
@@ -421,7 +433,10 @@ mod tests {
         let attestor = NitroEnclavesAttestor::new("http://localhost:8080".to_string());
         let quote = attestor.generate_attestation_quote(b"test-nonce");
         assert!(quote.is_ok(), "Attestation generation should succeed");
-        assert!(quote.unwrap().len() > 0, "Attestation quote should not be empty");
+        assert!(
+            quote.unwrap().len() > 0,
+            "Attestation quote should not be empty"
+        );
     }
 
     #[tokio::test]

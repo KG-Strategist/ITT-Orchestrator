@@ -4,7 +4,7 @@
 //! "Prompt Injections", "Jailbreaks", and "Semantic Drift" inline (<10ms).
 
 use std::collections::HashSet;
-use tracing::{info, warn, error, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::error::AppError;
 
@@ -70,7 +70,7 @@ impl Zone4SemanticFirewall {
     fn calculate_trust_score(&self, raw_intent: &[u8]) -> RealTimeTrustScore {
         let intent_str = String::from_utf8_lossy(raw_intent);
         let lower_intent = intent_str.to_lowercase();
-        
+
         // 1. Check for known jailbreak/prompt injection keywords
         let mut is_jailbreak = false;
         let mut jailbreak_hits = 0;
@@ -83,13 +83,13 @@ impl Zone4SemanticFirewall {
 
         // 2. Check for semantic drift (excessively long prompts or weird patterns)
         let semantic_drift_detected = intent_str.len() > 5000;
-        
+
         // 3. Calculate entropy
         let entropy = Self::calculate_entropy(&intent_str);
-        
+
         // Base score is 100
         let mut score = 100.0;
-        
+
         // Deductions
         if is_jailbreak {
             score -= 30.0 * (jailbreak_hits as f32);
@@ -97,12 +97,12 @@ impl Zone4SemanticFirewall {
         if semantic_drift_detected {
             score -= 20.0;
         }
-        
+
         // High entropy deduction (e.g., base64 encoded payloads or random garbage)
         if entropy > 5.5 {
             score -= 15.0;
         }
-        
+
         // Length penalty for extremely short or extremely long prompts
         if intent_str.len() < 5 {
             score -= 5.0;
@@ -118,10 +118,13 @@ impl Zone4SemanticFirewall {
 
     /// Inspects the raw input intent.
     /// Returns the sanitized payload or rejects it entirely if malicious.
-    #[instrument(name = "SemanticFirewall::inspect_and_sanitize", skip(self, raw_intent))]
+    #[instrument(
+        name = "SemanticFirewall::inspect_and_sanitize",
+        skip(self, raw_intent)
+    )]
     pub async fn inspect_and_sanitize(&self, raw_intent: &[u8]) -> Result<Vec<u8>, AppError> {
         let trust_score = self.calculate_trust_score(raw_intent);
-        
+
         // MELT Observability: Log the Trust Score
         info!(
             trust_score = %trust_score.score,

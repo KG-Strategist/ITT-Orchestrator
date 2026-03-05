@@ -949,7 +949,7 @@ ${nodes.map(n => {
             {selectedNode.type === 'semanticFirewall' && (
               <>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">IronClaw Defense</h4>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Secure Execution Sandbox Defense</h4>
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Trust Score Threshold (0-100)</label>

@@ -55,7 +55,7 @@ ITT-Orchestrator/
 │       ├── itt_memory/
 │       ├── itt_middleware/
 │       ├── itt_privacy/
-│       └── itt_edge/
+│       └── edge_agent/
 │
 ├── 🎨 Frontend (READY)
 │   ├── src/

@@ -1,15 +1,48 @@
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::{sleep, Duration};
-use tracing::{info, warn, error, instrument};
-use dashmap::DashMap;
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
-/// ZeroClaw InsightAgent: Lightweight edge compute agent (<5MB RAM)
+/// Sovereign Edge Agent InsightAgent: Lightweight edge compute agent (<5MB RAM)
 ///
 /// Connects to the Control Plane via AgentSocket Protocol and evaluates
 /// local traffic policies with sub-5ms latency.
+
+// ==================================================================================
+// ENTERPRISE ENHANCEMENT: eBPF & Hardware Acceleration
+// ==================================================================================
+
+/// eBPF Kernel-Level Interception Stub
+///
+/// Hooks into XDP (eXpress Data Path) or socket filters to intercept network
+/// traffic before it reaches the user-space networking stack, enabling
+/// <1ms semantic filtering.
+pub trait EbpfInterceptor: Send + Sync {
+    /// Loads the eBPF program into the kernel.
+    fn load_bpf_program(&self, interface: &str) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Reads telemetry directly from the eBPF perf ring buffer.
+    fn poll_ring_buffer(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+}
+
+/// Local Hardware Acceleration Trait
+///
+/// Enables the edge agent to hook into local GPUs/NPUs (e.g., Apple Neural Engine,
+/// NVIDIA Jetson, Intel OpenVINO) for executing Small Language Models (SLMs).
+pub trait HardwareAccelerator: Send + Sync {
+    /// Initializes the hardware accelerator (GPU/NPU).
+    fn initialize_device(&self) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Executes a compressed SLM inference pass natively on the hardware.
+    fn execute_slm_inference(
+        &self,
+        prompt_tokens: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+}
+
 #[derive(Clone)]
 pub struct InsightAgent {
     pub id: String,
@@ -44,7 +77,10 @@ pub struct TelemetryEvent {
 impl InsightAgent {
     /// Initializes a new InsightAgent and spawns background tasks
     #[instrument(skip_all, fields(zone = %zone))]
-    pub async fn spawn(zone: &str, control_plane_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn spawn(
+        zone: &str,
+        control_plane_url: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let agent_id = Uuid::new_v4().to_string();
         info!("Spawning InsightAgent-{} for zone: {}", agent_id, zone);
 
@@ -109,7 +145,10 @@ impl InsightAgent {
 
     /// Evaluates intent against cached policies (<5ms latency target)
     #[instrument(skip(self), fields(agent_id = %self.id))]
-    pub async fn evaluate_policy(&self, intent_payload: &[u8]) -> Result<PolicyDecision, Box<dyn std::error::Error>> {
+    pub async fn evaluate_policy(
+        &self,
+        intent_payload: &[u8],
+    ) -> Result<PolicyDecision, Box<dyn std::error::Error>> {
         let start_time = std::time::Instant::now();
 
         // Parse intent (normally would deserialize from payload)
@@ -136,7 +175,10 @@ impl InsightAgent {
     }
 
     /// Emits telemetry event back to Control Plane
-    pub async fn emit_telemetry(&self, event: TelemetryEvent) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn emit_telemetry(
+        &self,
+        event: TelemetryEvent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!("{}/api/v1/telemetry", self.control_plane_url);
         let client = reqwest::Client::new();
         client.post(&url).json(&event).send().await?;
@@ -154,8 +196,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let zone = std::env::var("ZONE").unwrap_or_else(|_| "zone2".to_string());
-    let control_plane_url = std::env::var("CONTROL_PLANE_URL")
-        .unwrap_or_else(|_| "http://localhost:3001".to_string());
+    let control_plane_url =
+        std::env::var("CONTROL_PLANE_URL").unwrap_or_else(|_| "http://localhost:3001".to_string());
 
     info!(
         "Starting InsightAgent for zone: {}, Control Plane: {}",

@@ -20,12 +20,13 @@ impl DpdpTokenizer {
     pub fn new() -> Self {
         // Aadhaar: 12 digit number, optionally separated by spaces or dashes
         let aadhaar_regex = Arc::new(Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b").unwrap());
-        
+
         // PAN: 5 uppercase letters, 4 digits, 1 uppercase letter
         let pan_regex = Arc::new(Regex::new(r"\b[A-Z]{5}\d{4}[A-Z]{1}\b").unwrap());
-        
+
         // Email: Standard email pattern
-        let email_regex = Arc::new(Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap());
+        let email_regex =
+            Arc::new(Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap());
 
         Self {
             aadhaar_regex,
@@ -52,22 +53,31 @@ impl DpdpTokenizer {
         let mut replacements_made = 0;
 
         // Tokenize Aadhaar
-        tokenized = self.aadhaar_regex.replace_all(&tokenized, |caps: &regex::Captures| {
-            replacements_made += 1;
-            Self::generate_token("AADHAAR", &caps[0].replace(&['-', ' '][..], ""))
-        }).to_string();
+        tokenized = self
+            .aadhaar_regex
+            .replace_all(&tokenized, |caps: &regex::Captures| {
+                replacements_made += 1;
+                Self::generate_token("AADHAAR", &caps[0].replace(&['-', ' '][..], ""))
+            })
+            .to_string();
 
         // Tokenize PAN
-        tokenized = self.pan_regex.replace_all(&tokenized, |caps: &regex::Captures| {
-            replacements_made += 1;
-            Self::generate_token("PAN", &caps[0])
-        }).to_string();
+        tokenized = self
+            .pan_regex
+            .replace_all(&tokenized, |caps: &regex::Captures| {
+                replacements_made += 1;
+                Self::generate_token("PAN", &caps[0])
+            })
+            .to_string();
 
         // Tokenize Email
-        tokenized = self.email_regex.replace_all(&tokenized, |caps: &regex::Captures| {
-            replacements_made += 1;
-            Self::generate_token("EMAIL", &caps[0])
-        }).to_string();
+        tokenized = self
+            .email_regex
+            .replace_all(&tokenized, |caps: &regex::Captures| {
+                replacements_made += 1;
+                Self::generate_token("EMAIL", &caps[0])
+            })
+            .to_string();
 
         if replacements_made > 0 {
             info!(

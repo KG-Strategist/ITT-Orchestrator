@@ -3,8 +3,8 @@
 //! Defines traits and placeholder structs for Homomorphic Encryption (HE)
 //! and Local Differential Privacy (LDP).
 
-use rand::Rng;
 use rand::distributions::{Distribution, Uniform};
+use rand::Rng;
 use std::fmt::Debug;
 use tracing::instrument;
 

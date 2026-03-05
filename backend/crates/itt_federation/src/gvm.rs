@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs;
 use std::path::Path;
-use tracing::{info, error};
-use serde_json::json;
+use tracing::{error, info};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectivityRequest {
@@ -43,8 +43,9 @@ impl GvmEngine {
             .map_err(|e| GvmError::ParseError(format!("Failed to parse YAML: {}", e)))?;
 
         // 2. Real OPA Validation Check
-        let opa_url = std::env::var("OPA_URL").unwrap_or_else(|_| "http://localhost:8181/v1/data/gvm/allow".to_string());
-        
+        let opa_url = std::env::var("OPA_URL")
+            .unwrap_or_else(|_| "http://localhost:8181/v1/data/gvm/allow".to_string());
+
         let client = reqwest::Client::new();
         let opa_payload = json!({
             "input": {
@@ -58,9 +59,14 @@ impl GvmEngine {
             Ok(response) => {
                 if response.status().is_success() {
                     let result: serde_json::Value = response.json().await.unwrap_or_default();
-                    let allowed = result.get("result").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let allowed = result
+                        .get("result")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     if !allowed {
-                        return Err(GvmError::ValidationError("OPA Validation Failed: Manifest violates policy".to_string()));
+                        return Err(GvmError::ValidationError(
+                            "OPA Validation Failed: Manifest violates policy".to_string(),
+                        ));
                     }
                     info!("OPA Validation Passed via external engine.");
                 } else {
@@ -69,7 +75,10 @@ impl GvmEngine {
                 }
             }
             Err(e) => {
-                error!("Failed to connect to OPA engine: {}. Using fallback validation.", e);
+                error!(
+                    "Failed to connect to OPA engine: {}. Using fallback validation.",
+                    e
+                );
                 Self::fallback_validation(&manifest)?;
             }
         }
@@ -77,29 +86,43 @@ impl GvmEngine {
         // 3. GitOps Execution (Write to local folder)
         let gitops_dir = Path::new("gitops-state");
         if !gitops_dir.exists() {
-            fs::create_dir_all(gitops_dir)
-                .map_err(|e| GvmError::IoError(format!("Failed to create gitops directory: {}", e)))?;
+            fs::create_dir_all(gitops_dir).map_err(|e| {
+                GvmError::IoError(format!("Failed to create gitops directory: {}", e))
+            })?;
         }
 
-        let file_name = format!("{}-{}.yaml", manifest.metadata.namespace, manifest.metadata.name);
+        let file_name = format!(
+            "{}-{}.yaml",
+            manifest.metadata.namespace, manifest.metadata.name
+        );
         let file_path = gitops_dir.join(file_name);
 
         fs::write(&file_path, yaml_payload)
             .map_err(|e| GvmError::IoError(format!("Failed to write manifest to disk: {}", e)))?;
 
-        info!("GVM successfully processed and wrote manifest to {:?}", file_path);
+        info!(
+            "GVM successfully processed and wrote manifest to {:?}",
+            file_path
+        );
 
-        Ok(format!("Manifest {} deployed successfully", manifest.metadata.name))
+        Ok(format!(
+            "Manifest {} deployed successfully",
+            manifest.metadata.name
+        ))
     }
 
     fn fallback_validation(manifest: &ConnectivityRequest) -> Result<(), GvmError> {
         if manifest.spec.budget_code.is_none() {
-            return Err(GvmError::ValidationError("Missing budget_code in spec".to_string()));
+            return Err(GvmError::ValidationError(
+                "Missing budget_code in spec".to_string(),
+            ));
         }
 
         let zt_level = manifest.spec.zero_trust_level.as_deref().unwrap_or("none");
         if zt_level != "strict" && zt_level != "high" {
-            return Err(GvmError::ValidationError("Zero Trust rules violated: level must be strict or high".to_string()));
+            return Err(GvmError::ValidationError(
+                "Zero Trust rules violated: level must be strict or high".to_string(),
+            ));
         }
         info!("Fallback validation passed.");
         Ok(())

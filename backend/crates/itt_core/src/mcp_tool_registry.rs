@@ -7,13 +7,10 @@ use chrono::Utc;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::hash::Hasher;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, instrument, error};
+use tracing::{info, instrument};
 use uuid::Uuid;
-
-use crate::IntentContext;
 
 /// Error type for MCP Tool Registry operations.
 #[derive(Debug, Clone)]
@@ -57,7 +54,7 @@ pub struct MCPToolMetadata {
     pub description: String,
     /// SHA256 hash of the WASM bytecode for integrity verification
     pub wasm_hash: String,
-    /// Maximum execution time in milliseconds (~10000ms default from IronClaw)
+    /// Maximum execution time in milliseconds (~10000ms default from Secure Execution Sandbox)
     pub timeout_ms: u32,
     /// Maximum memory pages for WASM execution (1024 * 1024 = 1MB default)
     pub max_memory_pages: u32,
@@ -149,7 +146,8 @@ impl MCPToolRegistry {
         name: &str,
     ) -> Result<(MCPToolMetadata, Vec<u8>), RegistryError> {
         // Lock-free metadata lookup
-        let meta = self.metadata
+        let meta = self
+            .metadata
             .get(name)
             .ok_or_else(|| RegistryError::ToolNotFound(name.to_string()))?
             .clone();
@@ -163,15 +161,17 @@ impl MCPToolRegistry {
         drop(cache);
 
         // If cache miss, return error (caller must register first)
-        Err(RegistryError::ToolDiscoveryFailed(
-            format!("WASM bytecode for tool '{}' not found in cache", name),
-        ))
+        Err(RegistryError::ToolDiscoveryFailed(format!(
+            "WASM bytecode for tool '{}' not found in cache",
+            name
+        )))
     }
 
     /// Lists all registered tools' metadata.
     #[instrument(skip(self))]
     pub async fn list_tools(&self) -> Result<Vec<MCPToolMetadata>, RegistryError> {
-        let tools: Vec<MCPToolMetadata> = self.metadata
+        let tools: Vec<MCPToolMetadata> = self
+            .metadata
             .iter()
             .map(|ref_multi| ref_multi.clone())
             .collect();
@@ -264,7 +264,10 @@ mod tests {
         );
 
         // Register tool
-        registry.register_tool(meta.clone(), wasm_bytes.clone()).await.unwrap();
+        registry
+            .register_tool(meta.clone(), wasm_bytes.clone())
+            .await
+            .unwrap();
 
         // Discover tool
         let (discovered_meta, discovered_wasm) = registry.discover_tool("test_tool").await.unwrap();

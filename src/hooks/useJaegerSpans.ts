@@ -152,7 +152,7 @@ function getSpanColorAndMetadata(
     return { color: 'bg-blue-500', metadata };
   }
   if (
-    operationName.includes('IronClawSandbox') ||
+    operationName.includes('SecureExecutionSandbox') ||
     operationName.includes('execute_mcp_tool') ||
     operationName.includes('execute')
   ) {

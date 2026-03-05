@@ -5,10 +5,13 @@
 
 pub mod models;
 
-use tracing::{info, error, instrument};
+use models::{Role, Tenant, User};
+use mongodb::{
+    bson::{doc, Document},
+    Client, Collection,
+};
 use std::fmt;
-use mongodb::{Client, Collection, bson::{doc, Document}};
-use models::{User, Tenant, Role};
+use tracing::{error, info, instrument};
 
 /// Custom Error enum for Identity operations
 #[derive(Debug)]
@@ -60,7 +63,10 @@ impl IdentityMiddleware {
         };
 
         let filter = doc! { "username": username, "is_active": true };
-        let user = self.users_collection.find_one(filter, None).await
+        let user = self
+            .users_collection
+            .find_one(filter, None)
+            .await
             .map_err(|e| IdentityError::DatabaseError(e.to_string()))?;
 
         match user {
@@ -70,7 +76,9 @@ impl IdentityMiddleware {
             }
             None => {
                 error!("Authentication failed: User not found or inactive.");
-                Err(IdentityError::AuthenticationFailed("Invalid or expired token".into()))
+                Err(IdentityError::AuthenticationFailed(
+                    "Invalid or expired token".into(),
+                ))
             }
         }
     }
@@ -93,13 +101,22 @@ impl RBACManager {
     /// Evaluates if the user has the required PAM role to execute a privileged action.
     /// Fails securely with an HTTP 403 Forbidden if unauthorized.
     #[instrument(name = "RBACManager::evaluate_pam_policy", skip(self))]
-    pub async fn evaluate_pam_policy(&self, user_role: &str, required_permission: &str) -> Result<(), IdentityError> {
+    pub async fn evaluate_pam_policy(
+        &self,
+        user_role: &str,
+        required_permission: &str,
+    ) -> Result<(), IdentityError> {
         let filter = doc! { "name": user_role };
-        let role = self.roles_collection.find_one(filter, None).await
+        let role = self
+            .roles_collection
+            .find_one(filter, None)
+            .await
             .map_err(|e| IdentityError::DatabaseError(e.to_string()))?;
 
         if let Some(r) = role {
-            if r.permissions.contains(&required_permission.to_string()) || r.permissions.contains(&"*".to_string()) {
+            if r.permissions.contains(&required_permission.to_string())
+                || r.permissions.contains(&"*".to_string())
+            {
                 info!("PAM Policy check passed for role {}.", user_role);
                 return Ok(());
             }
@@ -110,7 +127,7 @@ impl RBACManager {
             user_role, required_permission
         );
         Err(IdentityError::Forbidden(
-            "PAM Policy Violation: Insufficient privileges to alter configuration.".into()
+            "PAM Policy Violation: Insufficient privileges to alter configuration.".into(),
         ))
     }
 }

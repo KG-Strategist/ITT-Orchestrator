@@ -5,8 +5,8 @@
 The ITT-Orchestrator is a **Unified Logical Control Plane** designed for Tier-1 Banks. It decouples governance from execution, adhering strictly to the Secure Enterprise Agent Gateway (SEAG) framework, Zero Trust, ultra-low latency, and sovereign AI principles.
 
 ### Foundational Philosophies
-*   **ZeroClaw (Rust Base)**: A trait-driven architecture targeting <5MB RAM footprint and <10ms startup time. Used for core orchestration and **Ultra-Lightweight Edge Insight Agents** deployed alongside execution platforms.
-*   **IronClaw (Rust Security)**: A "Security-first design" implementing WASM sandboxing for untrusted Model Context Protocol (MCP) tools and prompt injection defenses.
+*   **Sovereign Edge Agent (Rust Base)**: A trait-driven architecture targeting <5MB RAM footprint and <10ms startup time. Used for core orchestration and **Ultra-Lightweight Edge Insight Agents**. Now includes architecture for **eBPF kernel-level interception** and **local hardware acceleration** (GPUs/NPUs for SLMs).
+*   **Secure Execution Sandbox (Rust Security)**: A "Security-first design" implementing WASM sandboxing for untrusted Model Context Protocol (MCP) tools and prompt injection defenses. Features **Trusted Execution Environment (TEE) support** allowing code to execute in hardware enclaves (AWS Nitro, Intel SGX).
 
 ---
 
@@ -17,7 +17,7 @@ The ITT-Orchestrator is a **Unified Logical Control Plane** designed for Tier-1 
 ### 2. The Control Plane (Governance & Orchestration)
 Written in **Rust (Tokio)** for high-throughput, memory-safe, and predictable latency (<10ms overhead).
 *   **Tiny Transformer (The Brain)**: A self-learning cognitive engine mapping intents to "Direct Actions" (<15ms, $0 cost) before defaulting to external LLMs.
-*   **Semantic Firewall & DPDP Tokenizer (IronClaw)**: Calculates a `RealTimeTrustScore` inline to block prompt injections. **Continuous DPDP Compliance** ensures any PII entering the system is immediately tokenized and masked.
+*   **Semantic Firewall & DPDP Tokenizer (Secure Execution Sandbox)**: Calculates a `RealTimeTrustScore` inline to block prompt injections. **Continuous DPDP Compliance** ensures any PII entering the system is immediately tokenized and masked.
 *   **Cost Arbitrage (The Conscience)**: Uses a Financial Token Bucket to track monetary spend, triggering "Graceful Degradation" if budgets are exhausted.
 *   **TOON Optimizer**: Transparently compresses verbose JSON payloads into Token-Oriented Object Notation (TOON).
 *   **Federated Gateway Manager (GVM)**: Translates declarative Intent Manifests (YAML) into infrastructure state via GitOps, validated by Open Policy Agent (OPA).
@@ -36,7 +36,7 @@ The AGF consists of 4 Virtual Trust Zones:
 *   **Zone 1 (The Fortress)**: External ingress. Decryption Trust Anchor terminating TLS.
 *   **Zone 2 (The Core Guard)**: Legacy integration. Sovereign Sidecar (eBPF) for Identity Injection.
 *   **Zone 3 (The Velocity Mesh)**: Internal microservices. Sidecar-less ambient mesh (gRPC/TCP/ISO 8583).
-*   **Zone 4 (The Cognitive Edge)**: AI Governance. Executes ZeroClaw Micro-Agents and IronClaw WASM Sandboxes.
+*   **Zone 4 (The Cognitive Edge)**: AI Governance. Executes Sovereign Edge Agent Micro-Agents and Secure Execution Sandbox WASM Sandboxes.
 *   **Ultra-Lightweight Edge Insight Agents**: <5MB binaries sitting alongside gateways/Envoy to collect telemetry, execute local policy controls, and centralize insights via the Agent Socket Protocol.
 *   **Federated Learning**: Edge nodes compute localized model weight updates using Homomorphic Encryption (HE) and Local Differential Privacy (LDP).
 

@@ -17,7 +17,9 @@ impl Iso8583Transcoder {
     #[instrument(name = "Iso8583Transcoder::transcode_to_json", skip(raw_stream))]
     pub fn transcode_to_json(raw_stream: &[u8]) -> Result<String, AppError> {
         if raw_stream.len() < 4 {
-            return Err(AppError::InternalError("Invalid ISO 8583 stream: too short".to_string()));
+            return Err(AppError::InternalError(
+                "Invalid ISO 8583 stream: too short".to_string(),
+            ));
         }
 
         // Extract MTI (first 4 bytes as ASCII)

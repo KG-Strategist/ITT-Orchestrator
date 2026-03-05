@@ -1,5 +1,5 @@
+use crate::models::{ApiRegistryEntry, MdmRule, Zone};
 use crate::CorpusManager;
-use crate::models::{ApiRegistryEntry, Zone, MdmRule};
 use std::sync::Arc;
 use uuid::Uuid;
 

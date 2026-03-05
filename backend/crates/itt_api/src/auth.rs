@@ -6,27 +6,27 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
     routing::post,
-    Json, Router, Extension,
+    Extension, Json, Router,
 };
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use chrono::{Duration, Utc};
 
-use crate::error::ApiError;
 use crate::config::Config;
+use crate::error::ApiError;
 
 /// JWT Claims structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
-    pub sub: String,           // Subject (user ID)
-    pub email: String,         // User email
-    pub roles: Vec<String>,    // RBAC roles
-    pub permissions: Vec<String>, // Fine-grained permissions
+    pub sub: String,               // Subject (user ID)
+    pub email: String,             // User email
+    pub roles: Vec<String>,        // RBAC roles
+    pub permissions: Vec<String>,  // Fine-grained permissions
     pub tenant_id: Option<String>, // Multi-tenancy support
-    pub exp: i64,              // Expiration time
-    pub iat: i64,              // Issued at
-    pub nbf: i64,              // Not before
+    pub exp: i64,                  // Expiration time
+    pub iat: i64,                  // Issued at
+    pub nbf: i64,                  // Not before
 }
 
 /// Login request
@@ -68,8 +68,8 @@ impl JwtManager {
         let decoding_key = DecodingKey::from_secret(config.jwt_secret.as_bytes());
 
         // Parse expiry duration (e.g., "24h", "7d")
-        let expiry_duration = parse_duration(&config.jwt_expiry)
-            .or_else(|_| Ok::<_, String>(Duration::hours(24)))?;
+        let expiry_duration =
+            parse_duration(&config.jwt_expiry).or_else(|_| Ok::<_, String>(Duration::hours(24)))?;
 
         Ok(Self {
             encoding_key,
@@ -79,7 +79,12 @@ impl JwtManager {
     }
 
     /// Create a new JWT token
-    pub fn create_token(&self, user_id: &str, email: &str, roles: Vec<String>) -> Result<String, String> {
+    pub fn create_token(
+        &self,
+        user_id: &str,
+        email: &str,
+        roles: Vec<String>,
+    ) -> Result<String, String> {
         let now = Utc::now();
         let exp = (now + self.expiry_duration).timestamp();
 
@@ -141,11 +146,9 @@ where
             .clone();
 
         // Validate token
-        let claims = jwt_manager.validate_token(&token).map_err(|e| {
-            ApiError::InvalidToken {
-                reason: e,
-            }
-        })?;
+        let claims = jwt_manager
+            .validate_token(&token)
+            .map_err(|e| ApiError::InvalidToken { reason: e })?;
 
         Ok(AuthUser { claims })
     }
@@ -172,7 +175,9 @@ pub async fn role_check_middleware(
         });
     }
 
-    Ok(next.run(axum::extract::Request::new(axum::body::Body::empty())).await)
+    Ok(next
+        .run(axum::extract::Request::new(axum::body::Body::empty()))
+        .await)
 }
 
 /// Login endpoint
@@ -193,11 +198,17 @@ pub async fn login(
     // like Okta, Ping Identity, or Active Directory via SAML/OIDC.
     // For this open-source release, we use a basic validation against environment variables
     // or a secure database. Here we simulate a secure check.
-    let is_valid_admin = payload.username == "admin" && payload.password == std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "secure_admin_pass_123!".to_string());
-    let is_valid_user = payload.username == "user" && payload.password == std::env::var("USER_PASSWORD").unwrap_or_else(|_| "secure_user_pass_123!".to_string());
+    let is_valid_admin = payload.username == "admin"
+        && payload.password
+            == std::env::var("ADMIN_PASSWORD")
+                .unwrap_or_else(|_| "secure_admin_pass_123!".to_string());
+    let is_valid_user = payload.username == "user"
+        && payload.password
+            == std::env::var("USER_PASSWORD")
+                .unwrap_or_else(|_| "secure_user_pass_123!".to_string());
 
     if !is_valid_admin && !is_valid_user {
-         return Err(ApiError::Unauthorized {
+        return Err(ApiError::Unauthorized {
             message: "Invalid credentials".to_string(),
         });
     }
@@ -221,7 +232,7 @@ pub async fn login(
 
     Ok(Json(LoginResponse {
         token,
-        expires_in: 86400,      // 24 hours in seconds
+        expires_in: 86400, // 24 hours in seconds
         token_type: "Bearer".to_string(),
     }))
 }
@@ -236,13 +247,11 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
             .map(Duration::hours)
             .map_err(|_| "Invalid hour value".to_string())
     } else if let Some(days) = s.strip_suffix('d') {
-        days
-            .parse::<i64>()
+        days.parse::<i64>()
             .map(Duration::days)
             .map_err(|_| "Invalid day value".to_string())
     } else if let Some(mins) = s.strip_suffix('m') {
-        mins
-            .parse::<i64>()
+        mins.parse::<i64>()
             .map(Duration::minutes)
             .map_err(|_| "Invalid minute value".to_string())
     } else {

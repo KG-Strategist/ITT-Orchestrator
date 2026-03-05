@@ -1,4 +1,4 @@
-//! IronClaw Sandbox (MCP Wasm Execution Engine)
+//! Secure Execution Sandbox Sandbox (MCP Wasm Execution Engine)
 //!
 //! Executes compiled WebAssembly modules (representing MCP tools) securely
 //! in a completely isolated memory space with strict timeouts.
@@ -15,17 +15,17 @@ use wasmtime::{Config, Engine, Instance, Module, Store, TypedFunc};
 
 use crate::error::AppError;
 
-/// The IronClaw Sandbox for executing Wasm modules.
+/// The Secure Execution Sandbox Sandbox for executing Wasm modules.
 ///
 /// Uses a background epoch incrementor thread to enforce strict timeouts
 /// on untrusted WASM code without blocking the caller.
-pub struct IronClawSandbox {
+pub struct SecureExecutionSandbox {
     engine: Arc<Engine>,
     _epoch_task: Arc<Mutex<tokio::task::JoinHandle<()>>>,
 }
 
-impl IronClawSandbox {
-    /// Initializes a new IronClaw Sandbox with strict resource limits.
+impl SecureExecutionSandbox {
+    /// Initializes a new Secure Execution Sandbox Sandbox with strict resource limits.
     ///
     /// Spawns a background tokio task that increments the engine's epoch every 100ms.
     /// This enforces a ~10-second timeout for WASM execution (100 * 100ms = 10s).
@@ -71,14 +71,14 @@ impl IronClawSandbox {
     /// * `wasm_bytes` - The compiled WebAssembly bytecode
     /// * `input` - Integer input to pass to the `execute` function
     #[instrument(
-        name = "IronClawSandbox::execute_mcp_tool",
+        name = "SecureExecutionSandbox::execute_mcp_tool",
         skip(self, wasm_bytes),
         fields(wasm_size_bytes = wasm_bytes.len(), input = %input)
     )]
     pub fn execute_mcp_tool(&self, wasm_bytes: &[u8], input: i32) -> Result<i32, AppError> {
         let start_time = Instant::now();
 
-        info!("Compiling Wasm module ({} bytes) in IronClaw sandbox", wasm_bytes.len());
+        info!("Compiling Wasm module ({} bytes) in Secure Execution Sandbox sandbox", wasm_bytes.len());
 
         let module = Module::new(&self.engine, wasm_bytes)
             .map_err(|e| AppError::InternalError(format!("Failed to compile Wasm module: {}", e)))?;
@@ -121,10 +121,10 @@ impl IronClawSandbox {
     }
 }
 
-impl Drop for IronClawSandbox {
+impl Drop for SecureExecutionSandbox {
     /// Gracefully abort the epoch increment background task on sandbox shutdown.
     fn drop(&mut self) {
         // The JoinHandle will be dropped, and tokio will automatically abort the task
-        tracing::debug!("IronClawSandbox dropped; epoch incrementor task will be aborted");
+        tracing::debug!("SecureExecutionSandbox dropped; epoch incrementor task will be aborted");
     }
 }

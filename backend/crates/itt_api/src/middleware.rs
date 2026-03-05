@@ -1,7 +1,7 @@
 use axum::{
     body::{Body, Bytes},
     extract::Request,
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -11,12 +11,11 @@ use std::env;
 
 const MAX_PAYLOAD_SIZE: usize = 1024 * 1024; // 1 MB
 
-pub async fn governance_guardrails(
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn governance_guardrails(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     // 1. Authentication: Require OAuth 2.0 Bearer Token
-    let auth_header = req.headers().get(header::AUTHORIZATION)
+    let auth_header = req
+        .headers()
+        .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
 
@@ -38,25 +37,30 @@ pub async fn governance_guardrails(
 
     // Enforce strict Maximum Payload Size Limit
     if bytes.len() > MAX_PAYLOAD_SIZE {
-        tracing::error!("Governance Block: Payload Too Large ({} bytes).", bytes.len());
+        tracing::error!(
+            "Governance Block: Payload Too Large ({} bytes).",
+            bytes.len()
+        );
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     // Inline Payload Scanning (SQLi, XXE, XSS)
     let payload_str = String::from_utf8_lossy(&bytes).to_lowercase();
-    if payload_str.contains("select * from") || 
-       payload_str.contains("<!entity") || 
-       payload_str.contains("<script>") {
+    if payload_str.contains("select * from")
+        || payload_str.contains("<!entity")
+        || payload_str.contains("<script>")
+    {
         tracing::error!("Governance Block: Malicious payload detected (SQLi, XXE, or XSS).");
         return Err(StatusCode::FORBIDDEN);
     }
 
     // 3. OPA Policy Enforcement
-    let opa_url = env::var("OPA_URL").unwrap_or_else(|_| "http://localhost:8181/v1/data/itt/authz/allow".to_string());
-    
+    let opa_url = env::var("OPA_URL")
+        .unwrap_or_else(|_| "http://localhost:8181/v1/data/itt/authz/allow".to_string());
+
     // Extract token for OPA
     let token = auth_header.trim_start_matches("Bearer ").trim();
-    
+
     let opa_input = json!({
         "input": {
             "method": parts.method.as_str(),
@@ -79,9 +83,12 @@ pub async fn governance_guardrails(
             } else {
                 tracing::warn!("Governance Warning: Failed to parse OPA response. Failing open for demo purposes.");
             }
-        },
+        }
         Err(e) => {
-            tracing::warn!("Governance Warning: OPA unreachable ({}). Failing open for demo purposes.", e);
+            tracing::warn!(
+                "Governance Warning: OPA unreachable ({}). Failing open for demo purposes.",
+                e
+            );
         }
     }
 

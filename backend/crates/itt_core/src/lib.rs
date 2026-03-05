@@ -2,12 +2,12 @@
 //!
 //! This module defines the foundational traits for the Intent-to-Task Orchestration Platform.
 //! It strictly adheres to two core philosophies:
-//! 1. **ZeroClaw (Base)**: Ultra-lightweight, trait-driven, <5MB RAM footprint, <10ms startup.
-//! 2. **IronClaw (Security)**: Security-first, WASM sandboxing for tools, and prompt injection defense.
+//! 1. **Sovereign Edge Agent (Base)**: Ultra-lightweight, trait-driven, <5MB RAM footprint, <10ms startup.
+//! 2. **Secure Execution Sandbox (Security)**: Security-first, WASM sandboxing for tools, and prompt injection defense.
 
 pub mod mcp_tool_registry;
 
-pub use mcp_tool_registry::{MCPToolRegistry, MCPToolMetadata, RegistryError};
+pub use mcp_tool_registry::{MCPToolMetadata, MCPToolRegistry, RegistryError};
 
 use std::future::Future;
 
@@ -15,7 +15,7 @@ use std::future::Future;
 // 1. ZERO-CLAW: LIGHTWEIGHT AGENT SKELETON
 // ==========================================
 
-/// Represents a ZeroClaw-inspired Micro-Agent.
+/// Represents a Sovereign Edge Agent-inspired Micro-Agent.
 /// Designed for zero-overhead instantiation on edge devices (IoT, mobile).
 pub trait MicroAgent: Send + Sync {
     type Context;
@@ -27,14 +27,17 @@ pub trait MicroAgent: Send + Sync {
         Self: Sized;
 
     /// Processes a task with minimal memory footprint (<5MB RAM).
-    fn process_task(&self, payload: &[u8]) -> impl Future<Output = Result<Vec<u8>, Self::Error>> + Send;
+    fn process_task(
+        &self,
+        payload: &[u8],
+    ) -> impl Future<Output = Result<Vec<u8>, Self::Error>> + Send;
 }
 
 // ==========================================
 // 2. IRON-CLAW: SECURITY & SANDBOXING
 // ==========================================
 
-/// IronClaw-inspired Semantic Firewall.
+/// Secure Execution Sandbox-inspired Semantic Firewall.
 /// Acts as a pre-processing layer to defend against prompt injections and semantic drift.
 pub trait SemanticFirewall: Send + Sync {
     type Error;
@@ -44,7 +47,7 @@ pub trait SemanticFirewall: Send + Sync {
     fn inspect_and_sanitize(&self, raw_intent: &[u8]) -> Result<Vec<u8>, Self::Error>;
 }
 
-/// IronClaw-inspired WASM Sandbox for Model Context Protocol (MCP) Tools.
+/// Secure Execution Sandbox-inspired WASM Sandbox for Model Context Protocol (MCP) Tools.
 /// Ensures untrusted tool executions cannot compromise the host execution plane.
 pub trait WasmSandbox: Send + Sync {
     type Error;
@@ -77,7 +80,7 @@ pub trait IntentEngine: Send + Sync {
     type Firewall: SemanticFirewall;
     type Error;
 
-    /// Access the IronClaw Semantic Firewall.
+    /// Access the Secure Execution Sandbox Semantic Firewall.
     fn firewall(&self) -> &Self::Firewall;
 
     /// Analyzes the sanitized intent using a lightweight Transformer v5 architecture.
@@ -94,7 +97,7 @@ pub trait FederatedExecutionPlane: Send + Sync {
     type Sandbox: WasmSandbox;
     type Error;
 
-    /// Access the IronClaw WASM Sandbox for secure tool execution.
+    /// Access the Secure Execution Sandbox WASM Sandbox for secure tool execution.
     fn sandbox(&self) -> &Self::Sandbox;
 
     /// Routes the analyzed intent to the appropriate edge node or executes locally.
@@ -115,7 +118,7 @@ pub trait Orchestrator: Send + Sync {
     /// The main entry point for incoming requests.
     /// 1. Passes raw payload to the IntentEngine's Semantic Firewall.
     /// 2. Analyzes the intent to generate an IntentContext.
-    /// 3. Instantiates a ZeroClaw MicroAgent instantly.
+    /// 3. Instantiates a Sovereign Edge Agent MicroAgent instantly.
     /// 4. Dispatches to the FederatedExecutionPlane for WASM-sandboxed execution.
     fn orchestrate(
         &self,

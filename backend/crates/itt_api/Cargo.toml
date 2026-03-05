@@ -31,3 +31,4 @@ itt_memory = { path = "../itt_memory" }
 itt_privacy = { path = "../itt_privacy" }
 itt_intent = { path = "../itt_intent" }
 itt_federation = { path = "../itt_federation" }
+agent-socket-rs = { path = "../../../sdk/agent-socket-rs" }

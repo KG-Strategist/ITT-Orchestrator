@@ -10,11 +10,11 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use alloc::string::String;
 use alloc::collections::BTreeMap;
-use core::future::Future;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
+use core::future::Future;
 
 /// Custom Error enum for Edge Agent operations
 #[derive(Debug)]
@@ -22,18 +22,26 @@ pub enum EdgeError {
     TelemetryCollectionFailed(String),
     PolicyEnforcementFailed(String),
     SocketTransmissionError(String),
-    eBPFHookFailed(String),
+    EBpfhookFailed(String),
     HardwareAccelerationNotAvailable,
 }
 
 impl fmt::Display for EdgeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EdgeError::TelemetryCollectionFailed(msg) => write!(f, "Telemetry collection failed: {}", msg),
-            EdgeError::PolicyEnforcementFailed(msg) => write!(f, "Policy enforcement failed: {}", msg),
-            EdgeError::SocketTransmissionError(msg) => write!(f, "AgentSocket transmission error: {}", msg),
-            EdgeError::eBPFHookFailed(msg) => write!(f, "eBPF hook failed: {}", msg),
-            EdgeError::HardwareAccelerationNotAvailable => write!(f, "Hardware acceleration not available"),
+            EdgeError::TelemetryCollectionFailed(msg) => {
+                write!(f, "Telemetry collection failed: {}", msg)
+            }
+            EdgeError::PolicyEnforcementFailed(msg) => {
+                write!(f, "Policy enforcement failed: {}", msg)
+            }
+            EdgeError::SocketTransmissionError(msg) => {
+                write!(f, "AgentSocket transmission error: {}", msg)
+            }
+            EdgeError::EBpfhookFailed(msg) => write!(f, "eBPF hook failed: {}", msg),
+            EdgeError::HardwareAccelerationNotAvailable => {
+                write!(f, "Hardware acceleration not available")
+            }
         }
     }
 }
@@ -45,10 +53,16 @@ pub trait InsightAgent: Send + Sync {
     fn collect_telemetry(&self) -> impl Future<Output = Result<Vec<u8>, EdgeError>> + Send;
 
     /// Enforces local policy controls (e.g., rate limiting, circuit breaking) directly at the edge.
-    fn enforce_local_policy(&self, payload: &[u8]) -> impl Future<Output = Result<(), EdgeError>> + Send;
+    fn enforce_local_policy(
+        &self,
+        payload: &[u8],
+    ) -> impl Future<Output = Result<(), EdgeError>> + Send;
 
     /// Securely centralizes insights back to the core Orchestrator via the full-duplex AgentSocket protocol.
-    fn report_to_orchestrator(&self, agent_socket_payload: &[u8]) -> impl Future<Output = Result<(), EdgeError>> + Send;
+    fn report_to_orchestrator(
+        &self,
+        agent_socket_payload: &[u8],
+    ) -> impl Future<Output = Result<(), EdgeError>> + Send;
 }
 
 /// A reference implementation of an Ultra-Lightweight Sovereign Edge Agent
@@ -84,7 +98,7 @@ impl InsightAgent for SovereignSidecarAgent {
 /// kernel modules, enabling sub-microsecond observation and enforcement at the OS level.
 /// Uses the Linux eBPF (Extended Berkeley Packet Filter) subsystem for kernel-level
 /// program execution.
-pub trait eBPFHookProvider: Send + Sync {
+pub trait EBpfhookProvider: Send + Sync {
     /// Attach a network filter (packet sniffer/inspector) via eBPF XDP/TC hooks.
     ///
     /// XDP (eXpress Data Path) programs run at the NIC driver level with zero-copy
@@ -136,7 +150,7 @@ pub trait HardwareAccelerationProvider: Send + Sync {
 ///
 /// In production, this would link with libbpf or aya libraries to compile and attach
 /// eBPF programs. For this template, we provide a stub that demonstrates the interface.
-pub struct eBPFInterceptor {
+pub struct EBpfinterceptor {
     /// Name of the eBPF program / filter
     filter_name: String,
     /// Metrics collected from eBPF programs
@@ -145,7 +159,7 @@ pub struct eBPFInterceptor {
     is_active: bool,
 }
 
-impl eBPFInterceptor {
+impl EBpfinterceptor {
     /// Create a new eBPF interceptor for a given filter name.
     pub fn new(filter_name: String) -> Self {
         Self {
@@ -156,18 +170,18 @@ impl eBPFInterceptor {
     }
 }
 
-impl eBPFHookProvider for eBPFInterceptor {
+impl EBpfhookProvider for EBpfinterceptor {
     fn attach_network_filter(&self, filter_name: &str) -> Result<(), EdgeError> {
         // Production: Compile and attach eBPF XDP program via libbpf
         // Stub: Log the attachment intent
-        alloc::println!("eBPF: Attaching network filter: {}", filter_name);
+        let _ = alloc::format!("eBPF: Attaching network filter: {}", filter_name);
         Ok(())
     }
 
     fn hook_syscall(&self, syscall_name: &str) -> Result<(), EdgeError> {
         // Production: Attach tracepoint/kprobe via /sys/kernel/debug/tracing
         // Stub: Log the syscall hook
-        alloc::println!("eBPF: Hooking syscall: {}", syscall_name);
+        let _ = alloc::format!("eBPF: Hooking syscall: {}", syscall_name);
         Ok(())
     }
 
@@ -229,8 +243,14 @@ impl HardwareAccelerationProvider for LocalHardwareAccelerator {
     fn get_capabilities(&self) -> BTreeMap<String, String> {
         let mut caps = BTreeMap::new();
         caps.insert("device".to_string(), self.device_name.clone());
-        caps.insert("total_memory_mb".to_string(), alloc::format!("{}", self.total_memory_mb));
-        caps.insert("loaded_models".to_string(), alloc::format!("{}", self.loaded_models.len()));
+        caps.insert(
+            "total_memory_mb".to_string(),
+            alloc::format!("{}", self.total_memory_mb),
+        );
+        caps.insert(
+            "loaded_models".to_string(),
+            alloc::format!("{}", self.loaded_models.len()),
+        );
         caps
     }
 }
@@ -250,7 +270,7 @@ pub struct SovereignEdgeAgentAdvanced {
     /// Base insight agent for telemetry and policy
     base_agent: SovereignSidecarAgent,
     /// eBPF provider for kernel-level hooks
-    ebpf_provider: alloc::sync::Arc<dyn eBPFHookProvider>,
+    ebpf_provider: alloc::sync::Arc<dyn EBpfhookProvider>,
     /// Hardware acceleration provider for local SLM inference
     hardware_provider: alloc::sync::Arc<dyn HardwareAccelerationProvider>,
     /// Metrics cache
@@ -261,7 +281,7 @@ impl SovereignEdgeAgentAdvanced {
     /// Create a new Sovereign Edge Agent with eBPF and hardware acceleration.
     pub fn new(
         node_id: String,
-        ebpf_provider: alloc::sync::Arc<dyn eBPFHookProvider>,
+        ebpf_provider: alloc::sync::Arc<dyn EBpfhookProvider>,
         hardware_provider: alloc::sync::Arc<dyn HardwareAccelerationProvider>,
     ) -> Self {
         Self {
@@ -307,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_ebpf_interceptor_creation() {
-        let interceptor = eBPFInterceptor::new("test-filter".to_string());
+        let interceptor = EBpfinterceptor::new("test-filter".to_string());
         assert_eq!(interceptor.filter_name, "test-filter");
         assert!(!interceptor.is_active);
     }

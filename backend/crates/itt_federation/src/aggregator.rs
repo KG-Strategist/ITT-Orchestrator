@@ -6,10 +6,10 @@
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error, instrument};
+use tracing::{error, info, instrument, warn};
 
+use crate::privacy::{LdpEngine, LocalDifferentialPrivacy};
 use itt_middleware::error::AppError;
-use crate::privacy::{LocalDifferentialPrivacy, LdpEngine};
 
 /// Represents a model update from a client node.
 #[derive(Debug, Clone)]
@@ -28,7 +28,11 @@ pub struct FederatedAggregator {
 }
 
 impl FederatedAggregator {
-    pub fn new(initial_weights: Vec<f32>, aggregation_threshold: usize, ldp_engine: Option<LdpEngine>) -> Self {
+    pub fn new(
+        initial_weights: Vec<f32>,
+        aggregation_threshold: usize,
+        ldp_engine: Option<LdpEngine>,
+    ) -> Self {
         Self {
             global_model_weights: Arc::new(Mutex::new(initial_weights)),
             pending_updates: Arc::new(Mutex::new(Vec::new())),
@@ -49,7 +53,10 @@ impl FederatedAggregator {
         // Apply Local Differential Privacy (LDP) noise if configured
         if let Some(ref ldp) = self.ldp_engine {
             ldp.apply_noise(&mut update.gradients);
-            info!("Applied LDP noise to gradients for client {}", update.client_id);
+            info!(
+                "Applied LDP noise to gradients for client {}",
+                update.client_id
+            );
         }
 
         let mut pending = self.pending_updates.lock().await;
@@ -88,14 +95,18 @@ impl FederatedAggregator {
             if update.gradients.len() != num_weights {
                 return Err(AppError::InternalError(format!(
                     "Dimension mismatch: expected {}, got {} from client {}",
-                    num_weights, update.gradients.len(), update.client_id
+                    num_weights,
+                    update.gradients.len(),
+                    update.client_id
                 )));
             }
         }
 
         let total_samples: usize = updates.iter().map(|u| u.num_samples).sum();
         if total_samples == 0 {
-            return Err(AppError::InternalError("Total samples is zero.".to_string()));
+            return Err(AppError::InternalError(
+                "Total samples is zero.".to_string(),
+            ));
         }
 
         // Calculate the weighted average of gradients

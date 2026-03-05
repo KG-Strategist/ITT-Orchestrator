@@ -238,7 +238,7 @@ ITT-Orchestrator/
 │   ├── itt_federation/         # CAL 4 federated learning
 │   ├── itt_integrations/       # External APIs (Vault, etc.)
 │   ├── itt_identity/           # Identity & RBAC
-│   └── itt_edge/               # Sovereign Edge Agent with eBPF & hardware acceleration
+│   └── edge_agent/               # Sovereign Edge Agent with eBPF & hardware acceleration
 ├── src/components/             # React frontend
 │   ├── canvas/                 # React Flow DAG builder
 │   └── ...

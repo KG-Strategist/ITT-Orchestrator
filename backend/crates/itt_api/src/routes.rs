@@ -1,12 +1,15 @@
-use std::sync::Arc;
-use axum::{extract::State, Json, http::StatusCode};
-use crate::models::{IntegrationRequest, IntegrationResponse, ZoneRequest, ZoneResponse, GenerateDagRequest, GenerateDagResponse};
 use crate::error::ApiError;
+use crate::models::{
+    GenerateDagRequest, GenerateDagResponse, IntegrationRequest, IntegrationResponse, ZoneRequest,
+    ZoneResponse,
+};
 use crate::AppState;
-use uuid::Uuid;
-use itt_memory::models::{ApiRegistryEntry, Zone, MdmRule};
-use serde_json::json;
+use axum::{extract::State, http::StatusCode, Json};
 use itt_federation::gvm::GvmEngine;
+use itt_memory::models::{ApiRegistryEntry, MdmRule, Zone};
+use serde_json::json;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// POST /api/v1/gvm/manifest
 pub async fn post_gvm_manifest(
@@ -14,11 +17,12 @@ pub async fn post_gvm_manifest(
     body: String,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     tracing::info!("Received GVM Manifest payload");
-    
+
     match GvmEngine::process_manifest(&body).await {
-        Ok(msg) => {
-            Ok((StatusCode::OK, Json(json!({ "status": "success", "message": msg }))))
-        }
+        Ok(msg) => Ok((
+            StatusCode::OK,
+            Json(json!({ "status": "success", "message": msg })),
+        )),
         Err(e) => {
             tracing::error!("GVM Error: {:?}", e);
             Err(ApiError::BadRequest {
@@ -32,24 +36,27 @@ pub async fn post_gvm_manifest(
 /// GET /api/v1/registry
 /// Fetches the auto-discovered APIs
 pub async fn get_registry(
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<ApiRegistryEntry>>, ApiError> {
     tracing::info!("Fetching Unified API Registry from Smart Corpus...");
-    
+
     let apis = state.memory.get_registry().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        ApiError::InternalServerError {
+            message: "Internal server error".to_string(),
+            details: None,
+        }
     })?;
-    
+
     Ok(Json(apis))
 }
 
 /// GET /api/v1/integrations
 pub async fn get_integrations(
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     tracing::info!("Fetching Integrations...");
-    
+
     // In a real implementation, this would fetch active integrations from the graph store.
     // For this release, we return a predefined list of enterprise integrations.
     let integrations = vec![
@@ -58,18 +65,19 @@ pub async fn get_integrations(
         json!({ "id": "int_3", "name": "HashiCorp Vault", "type": "security", "status": "active" }),
         json!({ "id": "int_4", "name": "OpenTelemetry Collector", "type": "observability", "status": "active" }),
     ];
-    
+
     Ok(Json(integrations))
 }
 
 /// GET /api/v1/zones
-pub async fn get_zones(
-    State(state): State<Arc<AppState>>
-) -> Result<Json<Vec<Zone>>, ApiError> {
+pub async fn get_zones(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Zone>>, ApiError> {
     tracing::info!("Fetching Zones...");
     let zones = state.memory.get_zones().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        ApiError::InternalServerError {
+            message: "Internal server error".to_string(),
+            details: None,
+        }
     })?;
     Ok(Json(zones))
 }
@@ -77,7 +85,7 @@ pub async fn get_zones(
 /// DELETE /api/v1/registry/:id
 pub async fn delete_registry(
     State(_state): State<Arc<AppState>>,
-    axum::extract::Path(id): axum::extract::Path<String>
+    axum::extract::Path(id): axum::extract::Path<String>,
 ) -> Result<StatusCode, ApiError> {
     tracing::info!("Deleting API from registry: {}", id);
     // In a real app, delete from memory/graph store
@@ -88,30 +96,51 @@ pub async fn delete_registry(
 /// Triggers the auto-discovery scanning
 pub async fn post_integration(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<IntegrationRequest>
+    Json(payload): Json<IntegrationRequest>,
 ) -> Result<(StatusCode, Json<IntegrationResponse>), ApiError> {
-    tracing::info!("Triggering auto-discovery for integration: {} ({})", payload.name, payload.r#type);
-    
+    tracing::info!(
+        "Triggering auto-discovery for integration: {} ({})",
+        payload.name,
+        payload.r#type
+    );
+
     // 1. Tokenize/Mask PII in the payload before cognitive processing
     let raw_json = serde_json::to_string(&payload).unwrap_or_default();
-    let safe_payload = state.privacy.mask_pii(&raw_json).map_err(|_| ApiError::InternalServerError { message: "Internal server error".to_string(), details: None })?;
+    let safe_payload =
+        state
+            .privacy
+            .mask_pii(&raw_json)
+            .map_err(|_| ApiError::InternalServerError {
+                message: "Internal server error".to_string(),
+                details: None,
+            })?;
 
     // 2. TinyTransformer Auto-Classification
     let integration_id = format!("int_{}", Uuid::new_v4());
-    let classified_api = state.intent.classify_api(&safe_payload, &payload.name, &integration_id).await;
+    let classified_api = state
+        .intent
+        .classify_api(&safe_payload, &payload.name, &integration_id)
+        .await;
 
     // 3. Store in Smart Corpus (Graph DB)
-    state.memory.add_api_node(classified_api).await.map_err(|e| {
-        tracing::error!("Failed to store classified API: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
-    })?;
+    state
+        .memory
+        .add_api_node(classified_api)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to store classified API: {:?}", e);
+            ApiError::InternalServerError {
+                message: "Internal server error".to_string(),
+                details: None,
+            }
+        })?;
 
     let response = IntegrationResponse {
         id: integration_id,
         status: "scanned_and_classified".to_string(),
         message: "Auto-discovery and taxonomy classification complete.".to_string(),
     };
-    
+
     Ok((StatusCode::ACCEPTED, Json(response)))
 }
 
@@ -119,10 +148,10 @@ pub async fn post_integration(
 /// Allows the Super Admin to create a new Adaptive Gateway Fabric zone
 pub async fn post_zone(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<ZoneRequest>
+    Json(payload): Json<ZoneRequest>,
 ) -> Result<(StatusCode, Json<ZoneResponse>), ApiError> {
     tracing::info!("Creating new AGF Zone: {}", payload.name);
-    
+
     let zone_id = format!("zone_{}", Uuid::new_v4());
     let new_zone = Zone {
         id: zone_id.clone(),
@@ -134,25 +163,31 @@ pub async fn post_zone(
 
     state.memory.add_zone(new_zone).await.map_err(|e| {
         tracing::error!("Failed to store zone: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        ApiError::InternalServerError {
+            message: "Internal server error".to_string(),
+            details: None,
+        }
     })?;
 
     let response = ZoneResponse {
         id: zone_id,
         status: "created".to_string(),
     };
-    
+
     Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// GET /api/v1/mdm/rules
 pub async fn get_mdm_rules(
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<MdmRule>>, ApiError> {
     tracing::info!("Fetching MDM Rules...");
     let rules = state.memory.get_mdm_rules().await.map_err(|e| {
         tracing::error!("CorpusManager error: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        ApiError::InternalServerError {
+            message: "Internal server error".to_string(),
+            details: None,
+        }
     })?;
     Ok(Json(rules))
 }
@@ -160,23 +195,33 @@ pub async fn get_mdm_rules(
 /// POST /api/v1/mdm/rules
 pub async fn post_mdm_rule(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<MdmRule>
+    Json(payload): Json<MdmRule>,
 ) -> Result<(StatusCode, Json<MdmRule>), ApiError> {
     tracing::info!("Creating new MDM Rule: {}", payload.name);
-    
+
     let mut new_rule = payload.clone();
     new_rule.id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| {
             tracing::error!("Time went backwards: {:?}", e);
-            ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+            ApiError::InternalServerError {
+                message: "Internal server error".to_string(),
+                details: None,
+            }
         })?
         .as_millis() as u64;
 
-    state.memory.add_mdm_rule(new_rule.clone()).await.map_err(|e| {
-        tracing::error!("Failed to store MDM rule: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
-    })?;
+    state
+        .memory
+        .add_mdm_rule(new_rule.clone())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to store MDM rule: {:?}", e);
+            ApiError::InternalServerError {
+                message: "Internal server error".to_string(),
+                details: None,
+            }
+        })?;
 
     Ok((StatusCode::CREATED, Json(new_rule)))
 }
@@ -184,12 +229,15 @@ pub async fn post_mdm_rule(
 /// DELETE /api/v1/mdm/rules/:id
 pub async fn delete_mdm_rule(
     State(state): State<Arc<AppState>>,
-    axum::extract::Path(id): axum::extract::Path<u64>
+    axum::extract::Path(id): axum::extract::Path<u64>,
 ) -> Result<StatusCode, ApiError> {
     tracing::info!("Deleting MDM Rule: {}", id);
     state.memory.delete_mdm_rule(id).await.map_err(|e| {
         tracing::error!("Failed to delete MDM rule: {:?}", e);
-        ApiError::InternalServerError { message: "Internal server error".to_string(), details: None }
+        ApiError::InternalServerError {
+            message: "Internal server error".to_string(),
+            details: None,
+        }
     })?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -198,21 +246,25 @@ pub async fn delete_mdm_rule(
 /// Generates a React Flow DAG based on natural language intent
 pub async fn post_generate_dag(
     State(_state): State<Arc<AppState>>,
-    Json(payload): Json<GenerateDagRequest>
+    Json(payload): Json<GenerateDagRequest>,
 ) -> Result<(StatusCode, Json<GenerateDagResponse>), ApiError> {
     tracing::info!("Generating DAG for prompt: {}", payload.prompt);
-    
+
     // In a real implementation, this would call an LLM or the TinyTransformer
     // to map the prompt to a specific DAG structure.
     // For now, we return a pre-wired template based on keywords.
-    
+
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    
+
     let prompt_lower = payload.prompt.to_lowercase();
     let is_test_mode = std::env::var("TEST_MODE").unwrap_or_default() == "true";
-    
-    if is_test_mode && (prompt_lower.contains("aml") || prompt_lower.contains("money laundering") || prompt_lower.contains("project aurora")) {
+
+    if is_test_mode
+        && (prompt_lower.contains("aml")
+            || prompt_lower.contains("money laundering")
+            || prompt_lower.contains("project aurora"))
+    {
         nodes = vec![
             json!({ "id": "1", "type": "intentTrigger", "position": { "x": 250, "y": 50 }, "data": { "label": "Event: Suspicious Transaction" } }),
             json!({ "id": "2", "type": "contextInjector", "position": { "x": 250, "y": 200 }, "data": { "source": "Milvus: Customer KG" } }),
@@ -247,12 +299,12 @@ pub async fn post_generate_dag(
             json!({ "id": "e2-3", "source": "2", "target": "3", "animated": true, "style": { "stroke": "#f43f5e", "strokeWidth": 2 } }),
         ];
     }
-    
+
     let response = GenerateDagResponse {
         nodes,
         edges,
         fallback_message: None,
     };
-    
+
     Ok((StatusCode::OK, Json(response)))
 }

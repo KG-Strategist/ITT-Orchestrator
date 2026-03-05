@@ -2,13 +2,15 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use futures_util::{sink::SinkExt, stream::StreamExt};
+use opentelemetry::trace::TraceContextPropagator;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{info, instrument, error, Span};
-use opentelemetry::trace::TraceContextPropagator;
+use tracing::{error, info, instrument, Span};
 
 use crate::AppState;
+use agent_socket_rs::adapters::{McpAdapter, ProtocolAdapter};
+use agent_socket_rs::protocol::{AgentSocketFrame, FrameType};
 
 pub async fn agent_socket_handler(
     ws: WebSocketUpgrade,
@@ -25,17 +27,29 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Spawn a task to handle outgoing messages from the broadcast channel
     let mut send_task = tokio::spawn(async move {
+        // Initialize an MCP adapter for outbound mapping if necessary, or just send valid frames
+        let adapter = McpAdapter::new(true);
+
         while let Ok(msg) = rx.recv().await {
-            let log_bytes = match serde_json::to_vec(&msg) {
+            let payload_bytes = match serde_json::to_vec(&msg) {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     tracing::error!("Failed to serialize log message: {}", e);
                     continue;
                 }
             };
-            if sender.send(Message::Binary(log_bytes)).await.is_err() {
-                tracing::info!("AgentSocket disconnected during MELT stream.");
-                break;
+
+            // Build a Telemetry frame
+            let frame = AgentSocketFrame::new(FrameType::Telemetry, payload_bytes);
+
+            // Convert to a target egress format
+            if let Ok(egress_bytes) =
+                adapter.egress(&serde_json::to_vec(&frame).unwrap_or_default())
+            {
+                if sender.send(Message::Binary(egress_bytes)).await.is_err() {
+                    tracing::info!("AgentSocket disconnected during MELT stream.");
+                    break;
+                }
             }
         }
     });
@@ -44,57 +58,98 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let melt_tx = state.melt_tx.clone();
     let state_clone = state.clone();
     let mut recv_task = tokio::spawn(async move {
+        let adapter = McpAdapter::new(true);
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Binary(data) => {
                     tracing::info!("AgentSocket received binary frame: {} bytes", data.len());
 
-                    // Create a span for this orchestration
                     let span = Span::current();
 
-                    // Parse the incoming message
-                    if let Ok(text) = String::from_utf8(data) {
-                        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if payload["action"] == "start_simulation" {
-                                // Execute real orchestration instead of hardcoded simulation
-                                match orchestrate_intent(&state_clone, payload["intent"].as_str().unwrap_or("default_intent").as_bytes()).await {
-                                    Ok((result_bytes, trace_id)) => {
-                                        // Send success response with trace_id for Jaeger correlation
-                                        let response = json!({
-                                            "status": "success",
-                                            "result": String::from_utf8_lossy(&result_bytes).to_string(),
-                                            "trace_id": trace_id,
-                                        });
+                    // Map incoming payload to AgentSocketFrame intent via the Adapter
+                    match adapter.ingress(&data) {
+                        Ok(frame_bytes) => {
+                            if let Ok(frame) =
+                                serde_json::from_slice::<AgentSocketFrame>(&frame_bytes)
+                            {
+                                if let Ok(text) = String::from_utf8(frame.payload) {
+                                    if let Ok(payload) =
+                                        serde_json::from_str::<serde_json::Value>(&text)
+                                    {
+                                        if payload["action"] == "start_simulation" {
+                                            match orchestrate_intent(
+                                                &state_clone,
+                                                payload["intent"]
+                                                    .as_str()
+                                                    .unwrap_or("default_intent")
+                                                    .as_bytes(),
+                                            )
+                                            .await
+                                            {
+                                                Ok((result_bytes, trace_id)) => {
+                                                    let response = json!({
+                                                        "status": "success",
+                                                        "result": String::from_utf8_lossy(&result_bytes).to_string(),
+                                                        "trace_id": trace_id,
+                                                    });
 
-                                        let _ = melt_tx.send(json!({
-                                            "type": "log",
-                                            "message": format!("[SUCCESS] Orchestration complete. Trace ID: {}", trace_id),
-                                            "color": "text-emerald-400"
-                                        }));
+                                                    let _ = melt_tx.send(json!({
+                                                        "type": "log",
+                                                        "message": format!("[SUCCESS] Orchestration complete. Trace ID: {}", trace_id),
+                                                        "color": "text-emerald-400"
+                                                    }));
 
-                                        // Send binary response
-                                        let response_bytes = serde_json::to_vec(&response).unwrap_or_default();
-                                        let _ = sender.send(Message::Binary(response_bytes)).await;
-                                    }
-                                    Err(e) => {
-                                        // Send error response
-                                        let error_response = json!({
-                                            "status": "error",
-                                            "error": e.to_string(),
-                                        });
+                                                    let response_bytes =
+                                                        serde_json::to_vec(&response)
+                                                            .unwrap_or_default();
+                                                    let resp_frame = AgentSocketFrame::new(
+                                                        FrameType::Response,
+                                                        response_bytes,
+                                                    );
+                                                    if let Ok(egress_bytes) = adapter.egress(
+                                                        &serde_json::to_vec(&resp_frame)
+                                                            .unwrap_or_default(),
+                                                    ) {
+                                                        let _ = sender
+                                                            .send(Message::Binary(egress_bytes))
+                                                            .await;
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    let error_response = json!({
+                                                        "status": "error",
+                                                        "error": e.to_string(),
+                                                    });
 
-                                        let _ = melt_tx.send(json!({
-                                            "type": "log",
-                                            "message": format!("[ERROR] Orchestration failed: {}", e),
-                                            "color": "text-red-400"
-                                        }));
+                                                    let _ = melt_tx.send(json!({
+                                                        "type": "log",
+                                                        "message": format!("[ERROR] Orchestration failed: {}", e),
+                                                        "color": "text-red-400"
+                                                    }));
 
-                                        let error_bytes = serde_json::to_vec(&error_response).unwrap_or_default();
-                                        let _ = sender.send(Message::Binary(error_bytes)).await;
+                                                    let error_bytes =
+                                                        serde_json::to_vec(&error_response)
+                                                            .unwrap_or_default();
+                                                    let resp_frame = AgentSocketFrame::new(
+                                                        FrameType::Response,
+                                                        error_bytes,
+                                                    );
+                                                    if let Ok(egress_bytes) = adapter.egress(
+                                                        &serde_json::to_vec(&resp_frame)
+                                                            .unwrap_or_default(),
+                                                    ) {
+                                                        let _ = sender
+                                                            .send(Message::Binary(egress_bytes))
+                                                            .await;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                        Err(e) => tracing::error!("Adapter ingress failed: {:?}", e),
                     }
                 }
                 Message::Text(_) => {
@@ -132,7 +187,12 @@ async fn orchestrate_intent(
     raw_payload: &[u8],
 ) -> Result<(Vec<u8>, String), String> {
     let start_time = Instant::now();
-    let trace_id = Span::current().context().span().span_context().trace_id().to_string();
+    let trace_id = Span::current()
+        .context()
+        .span()
+        .span_context()
+        .trace_id()
+        .to_string();
 
     info!("═══════════════════════════════════════════════════════════════════");
     info!("Stage 1/5: FIREWALL (Semantic Firewall & Jailbreak Detection)");
@@ -203,14 +263,25 @@ async fn orchestrate_intent(
             // If tool not found, create a minimal test WASM module
             info!("Tool not in registry, using default test WASM");
             let test_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-            (state.mcp_registry.list_tools().await.unwrap_or_default().first().cloned()
-                .unwrap_or_else(|| itt_core::MCPToolMetadata::new(
-                    tool_name.clone(),
-                    "1.0.0".to_string(),
-                    "Default test tool".to_string(),
-                    "abc123".to_string(),
-                    vec![]
-                )), test_wasm)
+            (
+                state
+                    .mcp_registry
+                    .list_tools()
+                    .await
+                    .unwrap_or_default()
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        itt_core::MCPToolMetadata::new(
+                            tool_name.clone(),
+                            "1.0.0".to_string(),
+                            "Default test tool".to_string(),
+                            "abc123".to_string(),
+                            vec![],
+                        )
+                    }),
+                test_wasm,
+            )
         }
     };
 
@@ -276,4 +347,3 @@ async fn orchestrate_intent(
 
     Ok((serde_json::to_vec(&response).unwrap_or_default(), trace_id))
 }
-

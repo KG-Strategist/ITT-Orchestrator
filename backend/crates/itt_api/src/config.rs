@@ -76,18 +76,15 @@ impl Config {
             // Neo4j
             neo4j_uri: env::var("NEO4J_URI")
                 .unwrap_or_else(|_| "bolt://localhost:7687".to_string()),
-            neo4j_user: env::var("NEO4J_USERNAME")
-                .unwrap_or_else(|_| "neo4j".to_string()),
-            neo4j_password: env::var("NEO4J_PASSWORD")
-                .unwrap_or_else(|_| "neo4j".to_string()),
+            neo4j_user: env::var("NEO4J_USERNAME").unwrap_or_else(|_| "neo4j".to_string()),
+            neo4j_password: env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "neo4j".to_string()),
 
             // Security
             jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
                 tracing::warn!("JWT_SECRET not configured, using default. THIS IS INSECURE!");
                 "default-secret-change-me-in-production-at-least-32-characters".to_string()
             }),
-            jwt_expiry: env::var("JWT_EXPIRY")
-                .unwrap_or_else(|_| "24h".to_string()),
+            jwt_expiry: env::var("JWT_EXPIRY").unwrap_or_else(|_| "24h".to_string()),
             cors_origins: env::var("CORS_ORIGINS")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string())
                 .split(',')

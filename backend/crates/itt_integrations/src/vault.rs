@@ -50,10 +50,16 @@ impl VaultClient {
 
     /// Fetches legacy credentials from Vault for a given OIDC subject (user ID).
     #[instrument(name = "VaultClient::fetch_legacy_credentials", skip(self))]
-    pub async fn fetch_legacy_credentials(&self, oidc_sub: &str) -> Result<VaultSecretData, AppError> {
+    pub async fn fetch_legacy_credentials(
+        &self,
+        oidc_sub: &str,
+    ) -> Result<VaultSecretData, AppError> {
         let secret_path = format!("{}/v1/secret/data/legacy_creds/{}", self.address, oidc_sub);
-        
-        info!("Fetching legacy credentials from Vault for OIDC sub: {}", oidc_sub);
+
+        info!(
+            "Fetching legacy credentials from Vault for OIDC sub: {}",
+            oidc_sub
+        );
 
         // In a real scenario, we would make an HTTP request to Vault:
         // let res = self.http_client.get(&secret_path)
@@ -61,14 +67,14 @@ impl VaultClient {
         //     .send()
         //     .await
         //     .map_err(|e| AppError::InternalError(format!("Vault request failed: {}", e)))?;
-        // 
+        //
         // if !res.status().is_success() {
         //     return Err(AppError::SecurityViolation(format!("Failed to fetch credentials from Vault: HTTP {}", res.status())));
         // }
-        // 
+        //
         // let vault_res: VaultResponse = res.json().await
         //     .map_err(|e| AppError::InternalError(format!("Failed to parse Vault response: {}", e)))?;
-        // 
+        //
         // vault_res.data.ok_or_else(|| AppError::InternalError("Vault response missing data field".to_string()))
 
         // For local testing/simulation without a real Vault instance, we mock the response
@@ -83,7 +89,10 @@ impl VaultClient {
             });
         }
 
-        Err(AppError::InternalError("Real Vault connection not implemented in this stub. Set SIMULATE_VAULT=true.".to_string()))
+        Err(AppError::InternalError(
+            "Real Vault connection not implemented in this stub. Set SIMULATE_VAULT=true."
+                .to_string(),
+        ))
     }
 }
 
@@ -99,7 +108,10 @@ impl IdentityMediator {
 
     /// Accepts a validated OIDC Token (represented here by its subject/user ID),
     /// fetches legacy credentials from Vault, and injects them into HTTP headers.
-    #[instrument(name = "IdentityMediator::inject_legacy_identity", skip(self, req_headers))]
+    #[instrument(
+        name = "IdentityMediator::inject_legacy_identity",
+        skip(self, req_headers)
+    )]
     pub async fn inject_legacy_identity(
         &self,
         oidc_sub: &str,
@@ -110,7 +122,7 @@ impl IdentityMediator {
         // Inject Basic Auth if password is provided
         if let Some(password) = creds.password {
             let auth_value = format!("{}:{}", creds.username, password);
-            use base64::{Engine as _, engine::general_purpose};
+            use base64::{engine::general_purpose, Engine as _};
             let encoded = general_purpose::STANDARD.encode(auth_value);
             req_headers.insert(
                 reqwest::header::AUTHORIZATION,
@@ -121,10 +133,7 @@ impl IdentityMediator {
 
         // Inject LDAP DN if provided
         if let Some(ldap_dn) = creds.ldap_dn {
-            req_headers.insert(
-                "X-Legacy-LDAP-DN",
-                ldap_dn.parse().unwrap(),
-            );
+            req_headers.insert("X-Legacy-LDAP-DN", ldap_dn.parse().unwrap());
             info!("Injected X-Legacy-LDAP-DN header for legacy system.");
         }
 

@@ -17,7 +17,8 @@ Large enterprises are paralyzed by the "Build vs. Buy" dilemma when managing div
 
 ## Key Features Implemented
 
-*   **Sovereign Edge Agent & Secure Execution Sandbox Philosophies**: Lightweight (<5MB RAM, <10ms startup) and Security-first (WASM sandboxing with TEE support, prompt injection defense).
+*   **Agent Socket Protocol SDK (New!)**: A standalone, decoupled Rust SDK for integrating AI telemetry and intent routing into your own systems. Add it directly: `cargo add agent-socket-rs`. Includes adaptive Direct/Relay runtimes and Polyglot Adapters (MCP, MQ, TCP).
+*   **Sovereign Edge Agent & Secure Execution Sandbox Philosophies**: Lightweight (<5MB RAM, <10ms startup) edge agents with **eBPF and hardware acceleration** stubs. Security-first execution with **WASM sandboxing with TEE support (AWS Nitro, Intel SGX)** and prompt injection defense.
 *   **Gateway Vending Machine (GVM) & Adaptive Gateway Fabric (AGF)**: 4 Virtual Trust Zones. Declarative Intent Manifests (YAML) validated by OPA.
 *   **Zone 4 Middleware**: Semantic Firewall, Cost Arbitrage, TOON Transformation, MELT Observability.
 *   **Tiny Transformer & Federated Learning**: Local intent evaluation mapping to Direct Actions. Federated Learner with Homomorphic Encryption (HE) and Local Differential Privacy (LDP).

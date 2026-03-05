@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::error::AppError;
 
@@ -33,27 +33,33 @@ impl Zone4CostArbitrage {
     /// Allocates a budget for a specific tenant or agent.
     pub async fn allocate_budget(&self, tenant_id: &str, budget_inr: f64) {
         let mut budgets = self.budgets.lock().await;
-        budgets.insert(tenant_id.to_string(), FinancialTokenBucket {
-            accumulated_spend_inr: 0.0,
-            daily_budget_inr: budget_inr,
-        });
+        budgets.insert(
+            tenant_id.to_string(),
+            FinancialTokenBucket {
+                accumulated_spend_inr: 0.0,
+                daily_budget_inr: budget_inr,
+            },
+        );
     }
 
     /// Evaluates the cost of an intent and routes to the appropriate model.
     /// Triggers Graceful Degradation if the budget is >95% exhausted.
-    #[instrument(name = "CostArbitrage::evaluate_and_route", skip(self, tenant_id, estimated_cost_inr))]
+    #[instrument(
+        name = "CostArbitrage::evaluate_and_route",
+        skip(self, tenant_id, estimated_cost_inr)
+    )]
     pub async fn evaluate_and_route(
-        &self, 
-        tenant_id: &str, 
+        &self,
+        tenant_id: &str,
         estimated_cost_inr: f64,
         requested_model: &str,
-        fallback_model: &str
+        fallback_model: &str,
     ) -> Result<String, AppError> {
         let mut budgets = self.budgets.lock().await;
-        
+
         if let Some(bucket) = budgets.get_mut(tenant_id) {
             let new_spend = bucket.accumulated_spend_inr + estimated_cost_inr;
-            
+
             // Hard limit: 100% exhaustion
             if new_spend >= bucket.daily_budget_inr {
                 error!(
@@ -62,9 +68,10 @@ impl Zone4CostArbitrage {
                     max_budget = %bucket.daily_budget_inr,
                     "Financial Token Bucket fully exhausted. Returning 402 Circuit Breaker."
                 );
-                return Err(AppError::RateLimitExceeded(
-                    format!("Wallet Drained: Daily budget of ₹{} exceeded.", bucket.daily_budget_inr)
-                ));
+                return Err(AppError::RateLimitExceeded(format!(
+                    "Wallet Drained: Daily budget of ₹{} exceeded.",
+                    bucket.daily_budget_inr
+                )));
             }
 
             // Graceful Degradation: >95% exhaustion
@@ -88,11 +95,14 @@ impl Zone4CostArbitrage {
             );
             return Ok(requested_model.to_string());
         }
-        
-        error!("Tenant {} not found in budget registry. Returning 402 Circuit Breaker.", tenant_id);
+
+        error!(
+            "Tenant {} not found in budget registry. Returning 402 Circuit Breaker.",
+            tenant_id
+        );
         Err(AppError::RateLimitExceeded(
-            "402 Payment Required: No financial token budget allocated for this tenant.".to_string()
+            "402 Payment Required: No financial token budget allocated for this tenant."
+                .to_string(),
         ))
     }
 }
-

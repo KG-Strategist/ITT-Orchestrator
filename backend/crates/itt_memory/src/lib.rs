@@ -1,13 +1,16 @@
 pub mod models;
 pub mod seeder;
 
+use async_trait::async_trait;
+use models::{ApiRegistryEntry, MdmRule, Zone};
 use moka::future::Cache;
+use mongodb::{
+    bson::{doc, Document},
+    Client, Collection,
+};
 use std::sync::Arc;
 use std::time::Duration;
-use async_trait::async_trait;
 use tracing::{info, instrument};
-use models::{ApiRegistryEntry, Zone, MdmRule};
-use mongodb::{Client, Collection, bson::{doc, Document}};
 
 #[derive(Debug)]
 pub enum MemoryError {
@@ -17,8 +20,17 @@ pub enum MemoryError {
 
 #[async_trait]
 pub trait VectorStore: Send + Sync {
-    async fn insert_embedding(&self, id: &str, vector: &[f32], metadata: &str) -> Result<(), MemoryError>;
-    async fn search_similar(&self, query_vector: &[f32], limit: usize) -> Result<Vec<serde_json::Value>, MemoryError>;
+    async fn insert_embedding(
+        &self,
+        id: &str,
+        vector: &[f32],
+        metadata: &str,
+    ) -> Result<(), MemoryError>;
+    async fn search_similar(
+        &self,
+        query_vector: &[f32],
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, MemoryError>;
     async fn purge_expired(&self, ttl: Duration) -> Result<usize, MemoryError>;
 }
 
@@ -39,7 +51,11 @@ pub struct MongoClient {
 }
 
 impl MongoClient {
-    pub async fn new(uri: &str, db_name: &str, coll_name: &str) -> Result<Self, mongodb::error::Error> {
+    pub async fn new(
+        uri: &str,
+        db_name: &str,
+        coll_name: &str,
+    ) -> Result<Self, mongodb::error::Error> {
         let client = Client::with_uri_str(uri).await?;
         let db = client.database(db_name);
         let collection = db.collection::<Document>(coll_name);
@@ -49,18 +65,30 @@ impl MongoClient {
 
 #[async_trait]
 impl VectorStore for MongoClient {
-    async fn insert_embedding(&self, id: &str, vector: &[f32], metadata: &str) -> Result<(), MemoryError> {
+    async fn insert_embedding(
+        &self,
+        id: &str,
+        vector: &[f32],
+        metadata: &str,
+    ) -> Result<(), MemoryError> {
         let doc = doc! {
             "id": id,
             "embedding": vector.to_vec(),
             "metadata": metadata,
             "created_at": mongodb::bson::DateTime::now(),
         };
-        self.collection.insert_one(doc, None).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        self.collection
+            .insert_one(doc, None)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         Ok(())
     }
 
-    async fn search_similar(&self, query_vector: &[f32], limit: usize) -> Result<Vec<serde_json::Value>, MemoryError> {
+    async fn search_similar(
+        &self,
+        query_vector: &[f32],
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, MemoryError> {
         use futures::stream::StreamExt;
         let pipeline = vec![
             doc! {
@@ -78,15 +106,20 @@ impl VectorStore for MongoClient {
                     "_id": 0,
                     "score": { "$meta": "vectorSearchScore" }
                 }
-            }
+            },
         ];
 
-        let mut cursor = self.collection.aggregate(pipeline, None).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        let mut cursor = self
+            .collection
+            .aggregate(pipeline, None)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         let mut results = Vec::new();
         while let Some(result) = cursor.next().await {
             match result {
                 Ok(doc) => {
-                    let json_val: serde_json::Value = mongodb::bson::from_document(doc).unwrap_or_default();
+                    let json_val: serde_json::Value =
+                        mongodb::bson::from_document(doc).unwrap_or_default();
                     results.push(json_val);
                 }
                 Err(e) => return Err(MemoryError::StoreError(e.to_string())),
@@ -100,7 +133,7 @@ impl VectorStore for MongoClient {
     }
 }
 
-use neo4rs::{Graph, query};
+use neo4rs::{query, Graph};
 
 pub struct Neo4jClient {
     graph: Graph,
@@ -108,7 +141,9 @@ pub struct Neo4jClient {
 
 impl Neo4jClient {
     pub async fn new(uri: &str, user: &str, pass: &str) -> Result<Self, String> {
-        let graph = Graph::new(uri, user, pass).await.map_err(|e| e.to_string())?;
+        let graph = Graph::new(uri, user, pass)
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(Self { graph })
     }
 }
@@ -116,20 +151,30 @@ impl Neo4jClient {
 #[async_trait]
 impl GraphStore for Neo4jClient {
     async fn insert_api_node(&self, api: &ApiRegistryEntry) -> Result<(), MemoryError> {
-        let q = query("CREATE (a:Api {id: $id, name: $name, category: $category, status: $status})")
-            .param("id", api.id.clone())
-            .param("name", api.name.clone())
-            .param("category", api.category.clone())
-            .param("status", api.status.clone());
-        self.graph.run(q).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        let q =
+            query("CREATE (a:Api {id: $id, name: $name, category: $category, status: $status})")
+                .param("id", api.id.clone())
+                .param("name", api.name.clone())
+                .param("category", api.category.clone())
+                .param("status", api.status.clone());
+        self.graph
+            .run(q)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         Ok(())
     }
 
     async fn get_all_apis(&self) -> Result<Vec<ApiRegistryEntry>, MemoryError> {
-        let mut result = self.graph.execute(query("MATCH (a:Api) RETURN a")).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        let mut result = self
+            .graph
+            .execute(query("MATCH (a:Api) RETURN a"))
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         let mut apis = Vec::new();
         while let Ok(Some(row)) = result.next().await {
-            let node: neo4rs::Node = row.get("a").map_err(|e| MemoryError::StoreError(e.to_string()))?;
+            let node: neo4rs::Node = row
+                .get("a")
+                .map_err(|e| MemoryError::StoreError(e.to_string()))?;
             apis.push(ApiRegistryEntry {
                 id: node.get("id").unwrap_or_default(),
                 name: node.get("name").unwrap_or_default(),
@@ -150,15 +195,24 @@ impl GraphStore for Neo4jClient {
             .param("id", zone.id.clone())
             .param("name", zone.name.clone())
             .param("description", zone.description.clone());
-        self.graph.run(q).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        self.graph
+            .run(q)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         Ok(())
     }
 
     async fn get_all_zones(&self) -> Result<Vec<Zone>, MemoryError> {
-        let mut result = self.graph.execute(query("MATCH (z:Zone) RETURN z")).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        let mut result = self
+            .graph
+            .execute(query("MATCH (z:Zone) RETURN z"))
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         let mut zones = Vec::new();
         while let Ok(Some(row)) = result.next().await {
-            let node: neo4rs::Node = row.get("z").map_err(|e| MemoryError::StoreError(e.to_string()))?;
+            let node: neo4rs::Node = row
+                .get("z")
+                .map_err(|e| MemoryError::StoreError(e.to_string()))?;
             zones.push(Zone {
                 id: node.get("id").unwrap_or_default(),
                 name: node.get("name").unwrap_or_default(),
@@ -175,15 +229,24 @@ impl GraphStore for Neo4jClient {
             .param("id", rule.id as i64)
             .param("name", rule.name.clone())
             .param("description", rule.description.clone());
-        self.graph.run(q).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        self.graph
+            .run(q)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         Ok(())
     }
 
     async fn get_all_mdm_rules(&self) -> Result<Vec<MdmRule>, MemoryError> {
-        let mut result = self.graph.execute(query("MATCH (m:MdmRule) RETURN m")).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        let mut result = self
+            .graph
+            .execute(query("MATCH (m:MdmRule) RETURN m"))
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         let mut rules = Vec::new();
         while let Ok(Some(row)) = result.next().await {
-            let node: neo4rs::Node = row.get("m").map_err(|e| MemoryError::StoreError(e.to_string()))?;
+            let node: neo4rs::Node = row
+                .get("m")
+                .map_err(|e| MemoryError::StoreError(e.to_string()))?;
             let id: i64 = node.get("id").unwrap_or_default();
             rules.push(MdmRule {
                 id: id as u64,
@@ -200,7 +263,10 @@ impl GraphStore for Neo4jClient {
 
     async fn delete_mdm_rule(&self, id: u64) -> Result<(), MemoryError> {
         let q = query("MATCH (m:MdmRule {id: $id}) DELETE m").param("id", id as i64);
-        self.graph.run(q).await.map_err(|e| MemoryError::StoreError(e.to_string()))?;
+        self.graph
+            .run(q)
+            .await
+            .map_err(|e| MemoryError::StoreError(e.to_string()))?;
         Ok(())
     }
 
@@ -218,7 +284,11 @@ pub struct CorpusManager {
 }
 
 impl CorpusManager {
-    pub fn new(vector_store: Arc<dyn VectorStore>, graph_store: Arc<dyn GraphStore>, cache_ttl: Duration) -> Self {
+    pub fn new(
+        vector_store: Arc<dyn VectorStore>,
+        graph_store: Arc<dyn GraphStore>,
+        cache_ttl: Duration,
+    ) -> Self {
         Self {
             api_cache: Cache::builder().time_to_live(cache_ttl).build(),
             zone_cache: Cache::builder().time_to_live(cache_ttl).build(),

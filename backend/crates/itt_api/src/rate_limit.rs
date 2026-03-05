@@ -1,16 +1,12 @@
-use axum::{
-    extract::Request,
-    middleware::Next,
-    response::IntoResponse,
-};
+use axum::{extract::Request, middleware::Next, response::IntoResponse};
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
+use tokio::sync::RwLock;
 
-use crate::error::ApiError;
 use crate::config::Config;
+use crate::error::ApiError;
 
 /// Rate limit entry containing request count and window start time
 #[derive(Clone, Debug)]
@@ -58,8 +54,8 @@ impl RateLimiter {
                         Ok(())
                     } else {
                         // Rate limit exceeded
-                        let retry_after = self.window_secs
-                            - elapsed.as_secs().min(self.window_secs);
+                        let retry_after =
+                            self.window_secs - elapsed.as_secs().min(self.window_secs);
                         Err((429, retry_after))
                     }
                 } else {

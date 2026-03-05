@@ -22,7 +22,7 @@ pub enum VirtualTrustZone {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectivityRequest {
     pub zone_intent: VirtualTrustZone,
-    pub protocol: String, // e.g., "gRPC", "SSE", "ISO8583"
+    pub protocol: String,   // e.g., "gRPC", "SSE", "ISO8583"
     pub finops_budget: f64, // Financial budget in USD/INR
     pub dpdp_masking_required: bool,
 }

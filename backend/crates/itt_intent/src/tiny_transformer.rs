@@ -1,5 +1,5 @@
-use tracing::{info, instrument};
 use itt_memory::models::ApiRegistryEntry;
+use tracing::{info, instrument};
 use uuid::Uuid;
 
 pub struct TinyTransformer {
@@ -14,22 +14,37 @@ impl TinyTransformer {
     }
 
     #[instrument(name = "TinyTransformer::classify_api", skip(self, payload))]
-    pub async fn classify_api(&self, payload: &str, integration_name: &str, integration_id: &str) -> ApiRegistryEntry {
+    pub async fn classify_api(
+        &self,
+        payload: &str,
+        integration_name: &str,
+        integration_id: &str,
+    ) -> ApiRegistryEntry {
         info!("TinyTransformer analyzing payload for taxonomy auto-classification...");
-        
+
         let payload_lower = payload.to_lowercase();
-        
-        let category = if payload_lower.contains("graphql") || payload_lower.contains("bff") || payload_lower.contains("mobile") {
+
+        let category = if payload_lower.contains("graphql")
+            || payload_lower.contains("bff")
+            || payload_lower.contains("mobile")
+        {
             "experience"
-        } else if payload_lower.contains("asyncapi") || payload_lower.contains("process") || payload_lower.contains("loan") {
+        } else if payload_lower.contains("asyncapi")
+            || payload_lower.contains("process")
+            || payload_lower.contains("loan")
+        {
             "process"
         } else {
             "system"
         };
 
         let mut semantic_tags = vec!["Auto-Discovered".to_string()];
-        if category == "system" { semantic_tags.push("Core".to_string()); }
-        if category == "experience" { semantic_tags.push("Aggregator".to_string()); }
+        if category == "system" {
+            semantic_tags.push("Core".to_string());
+        }
+        if category == "experience" {
+            semantic_tags.push("Aggregator".to_string());
+        }
 
         info!("Classification complete: Mapped to {} taxonomy.", category);
 
