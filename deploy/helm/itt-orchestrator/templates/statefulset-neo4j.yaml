@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-neo4j
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: neo4j
+spec:
+  serviceName: {{ include "itt-orchestrator.fullname" . }}-neo4j
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: neo4j
+  template:
+    metadata:
+      labels:
+        {{- include "itt-orchestrator.selectorLabels" . | nindent 8 }}
+        component: neo4j
+    spec:
+      containers:
+      - name: neo4j
+        image: neo4j:5-community
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+          name: bolt
+          protocol: TCP
+        - containerPort: 7474
+          name: http
+          protocol: TCP
+        - containerPort: 7473
+          name: https
+          protocol: TCP
+
+        env:
+        - name: NEO4J_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "itt-orchestrator.fullname" . }}-secrets
+              key: neo4j-auth
+        - name: NEO4J_PLUGINS
+          value: '["apoc"]'
+        - name: NEO4J_server_memory_pagecache_size
+          value: "256M"
+        - name: NEO4J_server_memory_heap_initial_size
+          value: "256M"
+        - name: NEO4J_server_memory_heap_max_size
+          value: "512M"
+
+        resources:
+          {{- toYaml .Values.resources.neo4j | nindent 10 }}
+
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: logs
+          mountPath: /logs
+        - name: tmp
+          mountPath: /tmp
+
+        startupProbe:
+          httpGet:
+            path: /db/manage/server/status
+            port: http
+            scheme: HTTP
+          failureThreshold: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        readinessProbe:
+          httpGet:
+            path: /db/manage/server/status
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /db/manage/server/status
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 5
+          timeoutSeconds: 5
+
+        securityContext:
+          runAsNonRoot: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+      terminationGracePeriodSeconds: 30
+
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.persistence.neo4j.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.neo4j.size }}
+  - metadata:
+      name: logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.persistence.neo4j.storageClassName }}
+      resources:
+        requests:
+          storage: 5Gi

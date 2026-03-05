@@ -1,0 +1,27 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-api-pdb
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: api
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-frontend-pdb
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: frontend
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: frontend

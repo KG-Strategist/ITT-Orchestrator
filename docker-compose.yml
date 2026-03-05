@@ -101,6 +101,26 @@ services:
       - "4318:4318"
     networks:
       - itt-network
+    depends_on:
+      - jaeger
+
+  # Jaeger (Distributed Tracing & Visualization)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: itt_jaeger
+    ports:
+      - "16686:16686"  # Web UI (http://localhost:16686)
+      - "14268:14268"  # Jaeger HTTP collector
+      - "14250:14250"  # Jaeger gRPC collector
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - itt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/traces"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Rust Backend API
   backend:
@@ -121,6 +141,8 @@ services:
         condition: service_started
       opa:
         condition: service_started
+      jaeger:
+        condition: service_healthy
       otel-collector:
         condition: service_started
     environment:
@@ -136,7 +158,12 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USERNAME: neo4j
       NEO4J_PASSWORD: neo4jpass
-      
+
+      # OpenTelemetry (MELT)
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317/v1/traces
+      OTEL_SERVICE_NAME: itt-orchestrator-control-plane
+
       # Security (use real values in production!)
       JWT_SECRET: dev-secret-key-at-least-32-chars-long-12345
       JWT_EXPIRY: 24h

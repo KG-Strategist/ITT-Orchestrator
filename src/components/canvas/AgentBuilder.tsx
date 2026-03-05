@@ -15,10 +15,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { 
-  IntentTriggerNode, 
-  SemanticFirewallNode, 
-  MCPToolNode, 
+import {
+  IntentTriggerNode,
+  SemanticFirewallNode,
+  MCPToolNode,
   TokenBudgetNode,
   IdentityMediationNode,
   ProtocolTranscoderNode,
@@ -45,6 +45,8 @@ import {
   LogAggregatorNode,
   DistributedTracerNode
 } from './CustomNodes';
+import { SpanTimeline } from './SpanTimeline';
+import { useJaegerSpans } from '../../hooks/useJaegerSpans';
 import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2 } from 'lucide-react';
 import { useOrchestratorStore } from '../../store/orchestratorStore';
 import { api } from '../../api/client';
@@ -111,12 +113,34 @@ const AgentBuilderContent: React.FC = () => {
   const [simulationLogs, setSimulationLogs] = useState<{text: string, color: string}[]>([]);
   const [showDeployMenu, setShowDeployMenu] = useState(false);
   const [isMeltConnected, setIsMeltConnected] = useState(false);
+  const [activeTerminalTab, setActiveTerminalTab] = useState<'logs' | 'traces'>('logs');
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [traceId, setTraceId] = useState<string | null>(null);
+  const { segments, loading: traceLoading, error: traceError } = useJaegerSpans(traceId || '');
   const { generateAgentDAG } = useOrchestratorStore();
   
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
+
+  const loadAuroraTemplate = () => {
+    const auroraNodes = [
+      { id: '1', type: 'intentTrigger', position: { x: 250, y: 50 }, data: { label: 'Event: Suspicious Transaction' } },
+      { id: '2', type: 'semanticFirewall', position: { x: 250, y: 200 }, data: { threshold: '95' } },
+      { id: '3', type: 'dpdpTokenizer', position: { x: 250, y: 350 }, data: {} },
+      { id: '4', type: 'federatedLearner', position: { x: 250, y: 500 }, data: { heEnabled: true, ldpEnabled: true } },
+      { id: '5', type: 'tokenBudget', position: { x: 250, y: 650 }, data: { budget: '50.00', fallbackModel: 'llama-3-8b-local' } },
+    ];
+    const auroraEdges = [
+      { id: 'e1-2', source: '1', target: '2', animated: true, style: { stroke: '#6366f1', strokeWidth: 2 } },
+      { id: 'e2-3', source: '2', target: '3', animated: true, style: { stroke: '#f43f5e', strokeWidth: 2 } },
+      { id: 'e3-4', source: '3', target: '4', animated: true, style: { stroke: '#ec4899', strokeWidth: 2 } },
+      { id: 'e4-5', source: '4', target: '5', animated: true, style: { stroke: '#8b5cf6', strokeWidth: 2 } },
+    ];
+    setNodes(auroraNodes);
+    setEdges(auroraEdges);
+    setTimeout(() => fitView({ duration: 800 }), 100);
+  };
 
   const handleGenerateDAG = async () => {
     if (!prompt.trim()) return;
@@ -303,7 +327,12 @@ const AgentBuilderContent: React.FC = () => {
         if (event.data instanceof Blob) {
           const text = await event.data.text();
           const data = JSON.parse(text);
-          
+
+          // Extract trace_id from the response for Jaeger visualization
+          if (data.trace_id && !traceId) {
+            setTraceId(data.trace_id);
+          }
+
           if (data.type === 'log') {
             setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
           } else if (data.type === 'status') {
@@ -311,10 +340,21 @@ const AgentBuilderContent: React.FC = () => {
                  setIsSimulating(false);
                  ws.close();
              }
+          } else if (data.status === 'success') {
+             // Real orchestration response with trace_id
+             setSimulationLogs(prev => [...prev, {
+               text: `✅ Orchestration Success | Trace ID: ${data.trace_id}`,
+               color: 'text-emerald-400'
+             }]);
+             setIsSimulating(false);
+             ws.close();
           }
         } else {
            // Fallback for text frames if any
            const data = JSON.parse(event.data);
+           if (data.trace_id && !traceId) {
+             setTraceId(data.trace_id);
+           }
            if (data.type === 'log') {
              setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
            } else if (data.type === 'status') {
@@ -359,6 +399,10 @@ ${nodes.map(n => {
     nodeYaml += `\n      fallback_model: ${n.data.fallbackModel || 'llama-3-8b-local'}`;
   } else if (n.type === 'semanticFirewall') {
     nodeYaml += `\n      trust_threshold: ${n.data.threshold || '85'}`;
+  } else if (n.type === 'federatedLearner') {
+    nodeYaml += `\n      he_enabled: ${n.data.heEnabled ? 'true' : 'false'}`;
+    nodeYaml += `\n      ldp_enabled: ${n.data.ldpEnabled ? 'true' : 'false'}`;
+    nodeYaml += `\n      zkp_enabled: ${n.data.zkpEnabled ? 'true' : 'false'}`;
   }
   return nodeYaml;
 }).join('\n')}
@@ -577,9 +621,18 @@ ${nodes.map(n => {
             />
             
             <Panel position="top-left" className="m-4">
-              <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg p-3 shadow-xl">
-                <h2 className="text-sm font-bold text-white mb-1">Project Aurora</h2>
-                <p className="text-xs text-slate-400">Federated AML Detection Template</p>
+              <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg p-3 shadow-xl space-y-2">
+                <div>
+                  <h2 className="text-sm font-bold text-white mb-1">Project Aurora</h2>
+                  <p className="text-xs text-slate-400">Federated AML Detection Template</p>
+                </div>
+                <button 
+                  onClick={loadAuroraTemplate}
+                  className="w-full px-3 py-1.5 bg-violet-600/20 hover:bg-violet-600/40 text-violet-300 border border-violet-500/30 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Load Template: Project Aurora (Cross-Border AML)
+                </button>
               </div>
             </Panel>
 
@@ -624,17 +677,17 @@ ${nodes.map(n => {
                         </div>
                       </button>
                       
-                      <button 
+                      <button
                         onClick={() => {
                           setShowDeployMenu(false);
-                          alert("Downloading ZeroClaw binary (<5MB)...");
+                          alert("Downloading Sovereign Edge Agent binary (<5MB)...");
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg flex items-center gap-3 transition-colors"
                       >
                         <Download className="w-4 h-4 text-emerald-500" />
                         <div>
                           <div className="font-bold">Download Agent Binary</div>
-                          <div className="text-xs text-slate-500">ZeroClaw Rust executable</div>
+                          <div className="text-xs text-slate-500">Sovereign Edge Agent Rust executable</div>
                         </div>
                       </button>
 
@@ -676,25 +729,78 @@ ${nodes.map(n => {
 
         {/* Simulation Terminal Drawer */}
         {showTerminal && (
-          <div className="h-64 bg-slate-950 border-t border-slate-800 flex flex-col shrink-0 z-20">
+          <div className="h-96 bg-slate-950 border-t border-slate-800 flex flex-col shrink-0 z-20">
             <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                <Terminal className="w-4 h-4" />
-                <span>MELT Observability: Live Chain of Thought</span>
-                {isSimulating && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse ml-2" />}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                  <Terminal className="w-4 h-4" />
+                  <span>MELT Observability: Live Chain of Thought</span>
+                  {isSimulating && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse ml-2" />}
+                </div>
+                {/* Tabs */}
+                <div className="flex gap-2 border-l border-slate-700 pl-4">
+                  <button
+                    onClick={() => setActiveTerminalTab('logs')}
+                    className={`px-3 py-1 text-xs font-medium rounded transition ${
+                      activeTerminalTab === 'logs'
+                        ? 'bg-slate-700 text-slate-100'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Logs
+                  </button>
+                  <button
+                    onClick={() => setActiveTerminalTab('traces')}
+                    className={`px-3 py-1 text-xs font-medium rounded transition ${
+                      activeTerminalTab === 'traces'
+                        ? 'bg-slate-700 text-slate-100'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Orchestration Trace
+                    {traceId && <span className="ml-1 text-emerald-400">✓</span>}
+                  </button>
+                </div>
               </div>
               <button onClick={() => setShowTerminal(false)} className="text-slate-500 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-2">
-              {simulationLogs.map((log, i) => (
-                <div key={i} className={`${log.color} animate-in fade-in slide-in-from-bottom-2`}>
-                  {log.text}
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto">
+              {/* Logs Tab */}
+              {activeTerminalTab === 'logs' && (
+                <div className="p-4 font-mono text-xs space-y-2">
+                  {simulationLogs.map((log, i) => (
+                    <div key={i} className={`${log.color} animate-in fade-in slide-in-from-bottom-2`}>
+                      {log.text}
+                    </div>
+                  ))}
+                  {isSimulating && <div className="text-slate-500 animate-pulse">_</div>}
+                  {!isSimulating && simulationLogs.length === 0 && (
+                    <div className="text-slate-600 text-center mt-8">Run a simulation to see logs</div>
+                  )}
                 </div>
-              ))}
-              {isSimulating && (
-                <div className="text-slate-500 animate-pulse">_</div>
+              )}
+
+              {/* Orchestration Trace Tab */}
+              {activeTerminalTab === 'traces' && (
+                <div className="p-4">
+                  {traceId && traceId !== 'undefined' ? (
+                    <SpanTimeline
+                      segments={segments}
+                      loading={traceLoading}
+                      error={traceError}
+                    />
+                  ) : (
+                    <div className="text-slate-600 text-center mt-8 text-xs">
+                      {isSimulating
+                        ? 'Loading trace...'
+                        : 'Run a simulation to see the orchestration trace'}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -730,17 +836,53 @@ ${nodes.map(n => {
                   
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">Homomorphic Encryption (HE)</span>
-                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                    <div 
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, heEnabled: !n.data.heEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${selectedNode.data.heEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${selectedNode.data.heEnabled ? 'right-1' : 'left-1'}`}></div>
+                    </div>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">Local Differential Privacy (LDP)</span>
-                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                    <div 
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, ldpEnabled: !n.data.ldpEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${selectedNode.data.ldpEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${selectedNode.data.ldpEnabled ? 'right-1' : 'left-1'}`}></div>
+                    </div>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">ZKP Audit Trailing</span>
-                    <div className="w-8 h-4 bg-emerald-500 rounded-full relative cursor-pointer"><div className="absolute right-1 top-0.5 w-3 h-3 bg-white rounded-full shadow"></div></div>
+                    <div 
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, zkpEnabled: !n.data.zkpEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${selectedNode.data.zkpEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${selectedNode.data.zkpEnabled ? 'right-1' : 'left-1'}`}></div>
+                    </div>
                   </div>
                 </div>
 

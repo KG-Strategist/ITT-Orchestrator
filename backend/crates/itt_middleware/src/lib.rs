@@ -10,6 +10,7 @@ pub mod firewall;
 pub mod arbitrage;
 pub mod toon;
 pub mod polyglot;
+pub mod secure_sandbox;
 
 // Re-exporting the modules for easier access
 pub use gvm::{VirtualTrustZone, ConnectivityRequest};
@@ -17,6 +18,7 @@ pub use firewall::{Zone4SemanticFirewall, RealTimeTrustScore};
 pub use arbitrage::{Zone4CostArbitrage, FinancialTokenBucket};
 pub use toon::ToonTransformer;
 pub use polyglot::Iso8583Transcoder;
+pub use secure_sandbox::{SecureExecutionSandbox, SecureExecutionSandboxWithTEE, TEEAttestationProvider, NitroEnclavesAttestor, IntelSGXAttestor};
 
 /// MELT Observability (OpenTelemetry)
 ///

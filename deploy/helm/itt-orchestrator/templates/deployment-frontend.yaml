@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-frontend
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: frontend
+spec:
+  replicas: {{ .Values.replicaCount.frontend }}
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "itt-orchestrator.selectorLabels" . | nindent 8 }}
+        component: frontend
+    spec:
+      serviceAccountName: {{ include "itt-orchestrator.serviceAccountName" . }}
+
+      containers:
+      - name: frontend
+        image: "{{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}"
+        imagePullPolicy: {{ .Values.image.frontend.pullPolicy }}
+
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 2
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 5
+          timeoutSeconds: 2
+
+        env:
+        - name: VITE_API_URL
+          value: "http://{{ include "itt-orchestrator.fullname" . }}-api:3001"
+        - name: NODE_ENV
+          value: "production"
+
+        resources:
+          requests:
+            cpu: {{ .Values.resources.frontend.requests.cpu }}
+            memory: {{ .Values.resources.frontend.requests.memory }}
+          limits:
+            cpu: {{ .Values.resources.frontend.limits.cpu }}
+            memory: {{ .Values.resources.frontend.limits.memory }}
+
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 10"]
+
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: {{ .Values.securityContext.runAsUser }}
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+        # Volume mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /app/.next/cache
+
+      # Pod anti-affinity: spread replicas across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - frontend
+              topologyKey: kubernetes.io/hostname
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+
+      terminationGracePeriodSeconds: 30

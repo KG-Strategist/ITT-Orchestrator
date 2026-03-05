@@ -1,0 +1,56 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+   https://{{ index .Values.ingress.hosts 0 .host }}
+{{- else if contains "NodePort" .Values.service.type }}
+   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "itt-orchestrator.fullname" . }})
+   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+   echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+     You can watch the status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "itt-orchestrator.fullname" . }}'
+   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "itt-orchestrator.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+   echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+   export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "itt-orchestrator.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+   export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+   echo "Visit http://127.0.0.1:8080 to use your application"
+   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- end }}
+
+2. Monitor the deployment:
+   kubectl rollout status deployment/{{ include "itt-orchestrator.fullname" . }}-api -n {{ .Release.Namespace }}
+   kubectl rollout status deployment/{{ include "itt-orchestrator.fullname" . }}-frontend -n {{ .Release.Namespace }}
+   kubectl rollout status statefulset/{{ include "itt-orchestrator.fullname" . }}-mongodb -n {{ .Release.Namespace }}
+   kubectl rollout status statefulset/{{ include "itt-orchestrator.fullname" . }}-neo4j -n {{ .Release.Namespace }}
+
+3. Check pod status:
+   kubectl get pods -n {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "itt-orchestrator.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+4. View logs:
+   # API logs
+   kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "itt-orchestrator.name" . }},component=api" -f
+
+   # Frontend logs
+   kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "itt-orchestrator.name" . }},component=frontend" -f
+
+5. Access Jaeger UI:
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "itt-orchestrator.fullname" . }}-jaeger 16686:16686
+
+   Then visit: http://localhost:16686
+
+6. Check database connectivity:
+   # MongoDB
+   kubectl exec -it {{ include "itt-orchestrator.fullname" . }}-mongodb-0 -n {{ .Release.Namespace }} -- mongosh --eval "db.adminCommand('ping')"
+
+   # Neo4j
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "itt-orchestrator.fullname" . }}-neo4j 7474:7474
+   Then visit: http://localhost:7474 (default user: neo4j)
+
+7. Important Notes:
+   - Update the default passwords in values.yaml before deploying to production
+   - Configure TLS certificates for ingress (cert-manager integration)
+   - Set up external-secrets-operator integration for production secret management
+   - Configure persistent volume provisioners for your cloud provider
+   - Enable pod disruption budgets for high availability
+
+For more information, visit: https://github.com/anthropic/itt-orchestrator

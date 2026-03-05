@@ -1,10 +1,16 @@
 [package]
-name = "itt_edge"
+name = "edge_agent"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tokio = { version = "1.40", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 axum = "0.7"
 tracing = "0.1"
+tracing_subscriber = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+dashmap = "5.5"
+uuid = { version = "1.10", features = ["v4", "serde"] }

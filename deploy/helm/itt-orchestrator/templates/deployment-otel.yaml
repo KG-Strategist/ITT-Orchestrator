@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-otel
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: otel
+spec:
+  replicas: {{ .Values.replicaCount.otel }}
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: otel
+  template:
+    metadata:
+      labels:
+        {{- include "itt-orchestrator.selectorLabels" . | nindent 8 }}
+        component: otel
+    spec:
+      serviceAccountName: {{ include "itt-orchestrator.serviceAccountName" . }}
+
+      containers:
+      - name: otel-collector
+        image: "{{ .Values.image.otel.repository }}:{{ .Values.image.otel.tag }}"
+        imagePullPolicy: {{ .Values.image.otel.pullPolicy }}
+
+        command: ["otelcontribcol", "--config=/conf/otel-collector-config.yaml"]
+
+        ports:
+        - name: otlp-grpc
+          containerPort: 4317
+          protocol: TCP
+        - name: otlp-http
+          containerPort: 4318
+          protocol: TCP
+        - name: metrics
+          containerPort: 8888
+          protocol: TCP
+        - name: health
+          containerPort: 13133
+          protocol: TCP
+
+        env:
+        - name: GOGC
+          value: "80"
+        - name: JAEGER_ENDPOINT
+          value: "http://{{ include "itt-orchestrator.fullname" . }}-jaeger:14250"
+
+        resources:
+          {{- toYaml .Values.resources.otel | nindent 10 }}
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /
+            port: health
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 2
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /
+            port: health
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 5
+          timeoutSeconds: 2
+
+        volumeMounts:
+        - name: otel-config
+          mountPath: /conf
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: otel-config
+        configMap:
+          name: {{ include "itt-orchestrator.fullname" . }}-otel-config
+      - name: tmp
+        emptyDir: {}
+
+      terminationGracePeriodSeconds: 30

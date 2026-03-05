@@ -32,7 +32,7 @@ export const SemanticFirewallNode = ({ data }: NodeProps) => {
         </div>
         <div>
           <h3 className="text-sm font-bold text-white">Semantic Firewall</h3>
-          <p className="text-xs text-slate-400">IronClaw Defense</p>
+          <p className="text-xs text-slate-400">Advanced Security Sandbox</p>
         </div>
       </div>
       <div className="flex justify-between items-center bg-slate-950 rounded p-2 text-xs border border-slate-800">

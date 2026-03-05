@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-api
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 4317
+    targetPort: otel
+    protocol: TCP
+    name: otel
+  selector:
+    {{- include "itt-orchestrator.selectorLabels" . | nindent 4 }}
+    component: api

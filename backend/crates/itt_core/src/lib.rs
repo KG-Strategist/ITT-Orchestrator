@@ -1,9 +1,13 @@
 //! ITT-Orchestrator Core Traits
-//! 
+//!
 //! This module defines the foundational traits for the Intent-to-Task Orchestration Platform.
 //! It strictly adheres to two core philosophies:
 //! 1. **ZeroClaw (Base)**: Ultra-lightweight, trait-driven, <5MB RAM footprint, <10ms startup.
 //! 2. **IronClaw (Security)**: Security-first, WASM sandboxing for tools, and prompt injection defense.
+
+pub mod mcp_tool_registry;
+
+pub use mcp_tool_registry::{MCPToolRegistry, MCPToolMetadata, RegistryError};
 
 use std::future::Future;
 

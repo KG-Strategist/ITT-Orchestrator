@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-jaeger
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: jaeger
+spec:
+  type: ClusterIP
+  ports:
+  - port: 16686
+    targetPort: jaeger-ui
+    protocol: TCP
+    name: ui
+  - port: 14250
+    targetPort: jaeger-grpc
+    protocol: TCP
+    name: grpc
+  - port: 14268
+    targetPort: jaeger-http
+    protocol: TCP
+    name: http
+  - port: 9411
+    targetPort: jaeger-zipkin
+    protocol: TCP
+    name: zipkin
+  selector:
+    {{- include "itt-orchestrator.selectorLabels" . | nindent 4 }}
+    component: jaeger

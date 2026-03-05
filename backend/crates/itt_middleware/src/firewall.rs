@@ -17,7 +17,7 @@ pub struct RealTimeTrustScore {
     pub entropy: f32,
 }
 
-/// The IronClaw-inspired Semantic Firewall implementation for Zone 4.
+/// The Secure Execution-inspired Semantic Firewall implementation for Zone 4.
 pub struct Zone4SemanticFirewall {
     pub threshold: f32,
     jailbreak_keywords: HashSet<&'static str>,

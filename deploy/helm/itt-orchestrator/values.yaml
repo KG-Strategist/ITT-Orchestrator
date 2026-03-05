@@ -1,0 +1,239 @@
+# Default Helm values for ITT-Orchestrator
+# Production deployments should override with values-prod.yaml
+
+replicaCount:
+  api: 2              # Rust backend replicas
+  frontend: 2         # Frontend replicas
+  otel: 1             # OTEL Collector (footprint: ~100Mi)
+  jaeger: 1           # Jaeger (footprint: ~300Mi)
+
+image:
+  api:
+    repository: anthropic/itt-orchestrator-api
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: anthropic/itt-orchestrator-frontend
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  otel:
+    repository: otel/opentelemetry-collector
+    tag: "0.88.0"
+    pullPolicy: IfNotPresent
+  jaeger:
+    repository: jaegertracing/all-in-one
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+resources:
+  api:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  otel:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      cpu: 200m
+      memory: 200Mi
+  jaeger:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  mongodb:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  neo4j:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+persistence:
+  mongodb:
+    enabled: true
+    size: 10Gi
+    storageClassName: "fast-ssd"
+  neo4j:
+    enabled: true
+    size: 20Gi
+    storageClassName: "fast-ssd"
+
+mongodb:
+  enabled: true
+  auth:
+    enabled: true
+    username: itt-user
+    # password: will be set via secrets
+  persistence:
+    size: 10Gi
+    storageClassName: "fast-ssd"
+
+neo4j:
+  enabled: true
+  auth:
+    enabled: true
+    # username: neo4j (default)
+    # password: will be set via secrets
+  persistence:
+    size: 20Gi
+    storageClassName: "fast-ssd"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: itt-orchestrator.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: itt-tls-cert
+      hosts:
+        - itt-orchestrator.example.com
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  api:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          preference:
+            matchExpressions:
+              - key: itt-workload
+                operator: In
+                values:
+                  - "true"
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - api
+            topologyKey: kubernetes.io/hostname
+
+# Pod Disruption Budget settings
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Security context settings
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Liveness and readiness probe settings
+probes:
+  startup:
+    initialDelaySeconds: 5
+    periodSeconds: 1
+    failureThreshold: 30
+    timeoutSeconds: 2
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+    timeoutSeconds: 2
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    failureThreshold: 5
+    timeoutSeconds: 2
+
+# Termination grace period
+terminationGracePeriodSeconds: 45
+
+# Log configuration
+logging:
+  level: info
+  rustLog: "info,itt_api=debug,itt_middleware=debug"
+
+# OTEL Configuration
+otel:
+  enabled: true
+  endpoint: "http://itt-orchestrator-otel:4317"
+  serviceName: "itt-orchestrator-control-plane"
+  samplingRate: 1.0
+
+# Database configuration
+database:
+  mongodb:
+    username: "itt-user"
+    password: "changeme"
+    uri: "mongodb://itt-user:changeme@itt-orchestrator-mongodb:27017/?authSource=admin&retryWrites=true&w=majority"
+    database: "itt_orchestrator"
+  neo4j:
+    uri: "bolt://itt-orchestrator-neo4j:7687"
+    username: "neo4j"
+    password: "changeme"
+
+# Health check configuration
+healthCheck:
+  enabled: true
+  path: "/health"
+  port: 3001
+  interval: 10s
+  timeout: 5s
+
+# Feature flags
+features:
+  semanticFirewall:
+    enabled: true
+    trustThreshold: 80.0
+  ironClawSandbox:
+    enabled: true
+    wasmTimeout: 10000
+  costArbitrage:
+    enabled: true
+    defaultBudget: 1000.0
+  mpcToolRegistry:
+    enabled: true

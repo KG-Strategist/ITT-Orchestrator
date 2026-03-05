@@ -1,0 +1,190 @@
+# Production overrides for ITT-Orchestrator Helm chart
+# Use with: helm install itt -f values.yaml -f values-prod.yaml
+
+replicaCount:
+  api: 3              # Production: 3 replicas for HA
+  frontend: 3         # Production: 3 replicas for HA
+  otel: 2             # Production: 2 replicas
+  jaeger: 2           # Production: 2 replicas for distributed setup
+
+image:
+  pullPolicy: IfNotPresent
+
+resources:
+  api:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+  frontend:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  otel:
+    requests:
+      cpu: 100m
+      memory: 200Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  jaeger:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  mongodb:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+  neo4j:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+persistence:
+  mongodb:
+    enabled: true
+    size: 100Gi
+    storageClassName: "fast-ssd"
+  neo4j:
+    enabled: true
+    size: 200Gi
+    storageClassName: "fast-ssd"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+  hosts:
+    - host: api.itt-orchestrator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: dashboard.itt-orchestrator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: itt-api-tls
+      hosts:
+        - api.itt-orchestrator.example.com
+    - secretName: itt-dashboard-tls
+      hosts:
+        - dashboard.itt-orchestrator.example.com
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+affinity:
+  api:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                  - compute
+        - weight: 50
+          preference:
+            matchExpressions:
+              - key: availability-zone
+                operator: In
+                values:
+                  - us-east-1a
+                  - us-east-1b
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: component
+                operator: In
+                values:
+                  - api
+          topologyKey: kubernetes.io/hostname
+
+probes:
+  startup:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 60
+    timeoutSeconds: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 3
+    failureThreshold: 5
+    timeoutSeconds: 2
+  liveness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 2
+
+terminationGracePeriodSeconds: 60
+
+logging:
+  level: warn
+  rustLog: "warn,itt_api=info,itt_middleware=info"
+
+otel:
+  enabled: true
+  endpoint: "http://itt-orchestrator-otel:4317"
+  serviceName: "itt-orchestrator-control-plane"
+  samplingRate: 0.1  # Sample 10% of traces in production
+
+features:
+  semanticFirewall:
+    enabled: true
+    trustThreshold: 90.0
+  secureExecutionSandbox:
+    enabled: true
+    wasmTimeout: 5000
+  costArbitrage:
+    enabled: true
+    defaultBudget: 5000.0
+  mpcToolRegistry:
+    enabled: true
+
+# Production database configuration
+database:
+  mongodb:
+    username: "itt-prod-user"
+    password: "CHANGE_ME_IN_PRODUCTION"
+    uri: "mongodb+srv://itt-prod-user:CHANGE_ME_IN_PRODUCTION@mongodb.example.com/?retryWrites=true&w=majority"
+    database: "itt_orchestrator_prod"
+  neo4j:
+    uri: "bolt+ssc://neo4j.example.com:7687"
+    username: "neo4j"
+    password: "CHANGE_ME_IN_PRODUCTION"
+
+# Monitoring and alerting
+monitoring:
+  enabled: true
+  interval: 30s
+  retention: 30d

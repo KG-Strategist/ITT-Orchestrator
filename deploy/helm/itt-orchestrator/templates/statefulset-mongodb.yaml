@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-mongodb
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: mongodb
+spec:
+  serviceName: {{ include "itt-orchestrator.fullname" . }}-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: mongodb
+  template:
+    metadata:
+      labels:
+        {{- include "itt-orchestrator.selectorLabels" . | nindent 8 }}
+        component: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "itt-orchestrator.fullname" . }}-secrets
+              key: mongodb-username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "itt-orchestrator.fullname" . }}-secrets
+              key: mongodb-password
+
+        resources:
+          {{- toYaml .Values.resources.mongodb | nindent 10 }}
+
+        volumeMounts:
+        - name: data
+          mountPath: /data/db
+        - name: tmp
+          mountPath: /tmp
+
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 5
+          timeoutSeconds: 5
+
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 5
+
+        securityContext:
+          runAsNonRoot: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+      terminationGracePeriodSeconds: 30
+
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.persistence.mongodb.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.mongodb.size }}

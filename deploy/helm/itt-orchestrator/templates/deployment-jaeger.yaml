@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itt-orchestrator.fullname" . }}-jaeger
+  labels:
+    {{- include "itt-orchestrator.labels" . | nindent 4 }}
+    component: jaeger
+spec:
+  replicas: {{ .Values.replicaCount.jaeger }}
+  selector:
+    matchLabels:
+      {{- include "itt-orchestrator.selectorLabels" . | nindent 6 }}
+      component: jaeger
+  template:
+    metadata:
+      labels:
+        {{- include "itt-orchestrator.selectorLabels" . | nindent 8 }}
+        component: jaeger
+    spec:
+      serviceAccountName: {{ include "itt-orchestrator.serviceAccountName" . }}
+
+      containers:
+      - name: jaeger
+        image: "{{ .Values.image.jaeger.repository }}:{{ .Values.image.jaeger.tag }}"
+        imagePullPolicy: {{ .Values.image.jaeger.pullPolicy }}
+
+        ports:
+        - name: jaeger-ui
+          containerPort: 16686
+          protocol: TCP
+        - name: jaeger-grpc
+          containerPort: 14250
+          protocol: TCP
+        - name: jaeger-http
+          containerPort: 14268
+          protocol: TCP
+        - name: jaeger-zipkin
+          containerPort: 9411
+          protocol: TCP
+
+        env:
+        - name: COLLECTOR_OTLP_ENABLED
+          value: "true"
+        - name: MEMORY_MAX_TRACES
+          value: "10000"
+
+        resources:
+          {{- toYaml .Values.resources.jaeger | nindent 10 }}
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /
+            port: jaeger-ui
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 2
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /
+            port: jaeger-ui
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 5
+          timeoutSeconds: 2
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+      terminationGracePeriodSeconds: 30

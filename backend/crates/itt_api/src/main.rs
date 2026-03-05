@@ -17,6 +17,9 @@ use axum::{
 };
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use opentelemetry::KeyValue;
+use opentelemetry_sdk::{trace as sdktrace, Resource};
+use opentelemetry_otlp::WithExportConfig;
 
 use itt_memory::{CorpusManager, MongoClient, Neo4jClient};
 use itt_privacy::{TokenizationEngine, SelfHygieneWorker};
@@ -30,16 +33,45 @@ pub struct AppState {
     pub jwt_manager: Arc<auth::JwtManager>,
     pub rate_limiter: Arc<rate_limit::RateLimiter>,
     pub melt_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
+    // Phase 5: Real Orchestration Components
+    pub firewall: Arc<itt_middleware::Zone4SemanticFirewall>,
+    pub sandbox: Arc<itt_middleware::SecureExecutionSandbox>,
+    pub cost_arbitrage: Arc<itt_middleware::Zone4CostArbitrage>,
+    pub mcp_registry: Arc<itt_core::MCPToolRegistry>,
+}
+
+// Helper to initialize OpenTelemetry
+fn init_tracer() -> Result<opentelemetry_sdk::trace::Tracer, opentelemetry::trace::TraceError> {
+    let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .unwrap_or_else(|_| "http://localhost:4317".to_string());
+
+    opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(otlp_endpoint),
+        )
+        .with_trace_config(
+            sdktrace::config().with_resource(Resource::new(vec![
+                KeyValue::new("service.name", "itt-orchestrator-control-plane"),
+            ])),
+        )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
 }
 
 #[tokio::main]
 async fn main() {
     // Initialize tracing for MELT Observability
+    let tracer = init_tracer().expect("Failed to initialize OTLP tracer");
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
+        .with(telemetry)
         .init();
 
     tracing::info!("Initializing ITT-Orchestrator Control Plane (itt_api)...");
@@ -106,6 +138,16 @@ async fn main() {
 
     let (melt_tx, _) = tokio::sync::broadcast::channel(100);
 
+    // Phase 5: Initialize Real Orchestration Components
+    let firewall = Arc::new(itt_middleware::Zone4SemanticFirewall::new(80.0)); // 80% trust threshold
+    let sandbox = Arc::new(itt_middleware::SecureExecutionSandbox::new()
+        .expect("Failed to initialize Secure Execution Sandbox"));
+    let cost_arbitrage = Arc::new(itt_middleware::Zone4CostArbitrage::new());
+    let mcp_registry = Arc::new(itt_core::MCPToolRegistry::new());
+
+    // Allocate default tenant budget (1000 INR)
+    cost_arbitrage.allocate_budget("default-tenant", 1000.0).await;
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         memory: corpus_manager.clone(),
@@ -114,6 +156,10 @@ async fn main() {
         jwt_manager: jwt_manager.clone(),
         rate_limiter: rate_limiter.clone(),
         melt_tx,
+        firewall,
+        sandbox,
+        cost_arbitrage,
+        mcp_registry,
     });
 
     if std::env::var("TEST_MODE").unwrap_or_default() == "true" {
