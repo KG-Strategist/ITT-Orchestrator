@@ -5,7 +5,9 @@ mod middleware;
 mod models;
 mod rate_limit;
 mod routes;
+mod setup;
 mod socket;
+mod user_store;
 
 use axum::{
     extract::State,
@@ -33,6 +35,7 @@ pub struct AppState {
     pub jwt_manager: Arc<auth::JwtManager>,
     pub rate_limiter: Arc<rate_limit::RateLimiter>,
     pub melt_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
+    pub user_store: Arc<user_store::UserStore>,
     // Phase 5: Real Orchestration Components
     pub firewall: Arc<itt_middleware::Zone4SemanticFirewall>,
     pub sandbox: Arc<itt_middleware::SecureExecutionSandbox>,
@@ -45,20 +48,29 @@ fn init_tracer() -> Result<opentelemetry_sdk::trace::Tracer, opentelemetry::trac
     let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
 
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(otlp_endpoint),
-        )
-        .with_trace_config(
-            sdktrace::config().with_resource(Resource::new(vec![KeyValue::new(
-                "service.name",
-                "itt-orchestrator-control-plane",
-            )])),
-        )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
+    use opentelemetry_otlp::SpanExporter;
+
+    let exporter = SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(otlp_endpoint)
+        .build()
+        .map_err(|e| opentelemetry::trace::TraceError::Other(Box::new(e)))?;
+
+    let provider = sdktrace::TracerProvider::builder()
+        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_resource(Resource::new(vec![KeyValue::new(
+            "service.name",
+            "itt-orchestrator-control-plane",
+        )]))
+        .build();
+
+    use opentelemetry::trace::TracerProvider;
+    let tracer = provider.tracer("itt-orchestrator");
+
+    // Set the global provider
+    let _ = opentelemetry::global::set_tracer_provider(provider);
+
+    Ok(tracer)
 }
 
 #[tokio::main]
@@ -125,8 +137,6 @@ async fn main() {
                 "Failed to connect to Neo4j: {}. Using fallback/mock if applicable.",
                 e
             );
-            // For this specific build, if neo4j fails, we might want to just panic or use a mock.
-            // Since we removed the mock, let's panic to ensure the environment is set up correctly.
             panic!("Neo4j connection is required: {}", e);
         }
     };
@@ -162,6 +172,14 @@ async fn main() {
         .allocate_budget("default-tenant", 1000.0)
         .await;
 
+    // Initialize MongoDB user store for enterprise auth
+    let mongo_client = mongodb::Client::with_uri_str(&config.mongodb_uri)
+        .await
+        .expect("Failed to connect to MongoDB for UserStore");
+    let mongo_db = mongo_client.database(&config.mongodb_database);
+    let user_store_instance = Arc::new(user_store::UserStore::new(&mongo_db));
+    tracing::info!("UserStore connected to MongoDB (db: {})", config.mongodb_database);
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         memory: corpus_manager.clone(),
@@ -170,6 +188,7 @@ async fn main() {
         jwt_manager: jwt_manager.clone(),
         rate_limiter: rate_limiter.clone(),
         melt_tx,
+        user_store: user_store_instance,
         firewall,
         sandbox,
         cost_arbitrage,
@@ -199,13 +218,28 @@ async fn main() {
         .route("/health", get(health_check))
         .route("/readiness", get(readiness_check))
         .route_layer(from_fn(middleware::governance_guardrails))
-        .with_state(app_state);
+        .with_state(app_state.clone());
 
-    // Public/Socket Routes
+    // Public Routes (No JWT/Governance middleware)
+    let public_routes = Router::new()
+        .route("/setup/status", get(setup::setup_status))
+        .route("/setup/init", post(setup::setup_init))
+        .route("/auth/login", post(auth::login))
+        .with_state(app_state.clone());
+
+    use tower_http::cors::{Any, CorsLayer};
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    // Mount all routes
     let app = Router::new()
         .nest("/api/v1", api_routes)
+        .nest("/api/v1", public_routes)
         .route("/v1/agent-socket", get(socket::agent_socket_handler))
-        .with_state(app_state);
+        .with_state(app_state)
+        .layer(cors);
 
     let addr = format!("{}:{}", "0.0.0.0", config.port);
 
@@ -243,7 +277,7 @@ async fn health_check() -> &'static str {
 }
 
 /// Readiness check endpoint for k8s readiness probe
-async fn readiness_check(State(state): State<Arc<AppState>>) -> &'static str {
+async fn readiness_check(State(_state): State<Arc<AppState>>) -> &'static str {
     // In production, check database connections here
     "READY"
 }

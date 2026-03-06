@@ -6,6 +6,7 @@ import Identity from './src/pages/Identity';
 import MDM from './src/pages/MDM';
 import Integrations from './src/pages/Integrations';
 import Login from './src/pages/Login';
+import Setup from './src/pages/Setup';
 import Dashboard from './src/pages/Dashboard';
 import AgentPortfolio from './src/pages/AgentPortfolio';
 import ApiRegistry from './src/pages/ApiRegistry';
@@ -23,6 +24,7 @@ const App: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/setup" element={<Setup />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard/executive" replace />} />
           <Route path="dashboard" element={<Navigate to="/dashboard/executive" replace />} />
@@ -38,10 +40,10 @@ const App: React.FC = () => {
           <Route path="integrations" element={<Integrations />} />
           <Route path="settings/organization" element={<SettingsPage type="organization" />} />
           <Route path="settings/currency" element={<SettingsPage type="currency" />} />
-          
+
           <Route path="agf/execution-planes" element={<ExecutionPlanes />} />
           <Route path="agf/policies" element={<PolicyManagement />} />
-          
+
           <Route path="gvm/manifests" element={<IntentManifests />} />
           <Route path="gvm/calculator" element={<GVSCalculator />} />
 

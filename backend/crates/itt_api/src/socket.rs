@@ -2,11 +2,12 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use futures_util::{sink::SinkExt, stream::StreamExt};
-use opentelemetry::trace::TraceContextPropagator;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use opentelemetry::trace::TraceContextExt;
 
 use crate::AppState;
 use agent_socket_rs::adapters::{McpAdapter, ProtocolAdapter};
@@ -22,8 +23,12 @@ pub async fn agent_socket_handler(
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     tracing::info!("AgentSocket connected. Upgraded to full-duplex binary stream.");
 
-    let (mut sender, mut receiver) = socket.split();
+    let (sender, mut receiver) = socket.split();
     let mut rx = state.melt_tx.subscribe();
+
+    // Wrap sender in Arc<Mutex> so both tasks can use it
+    let sender = Arc::new(tokio::sync::Mutex::new(sender));
+    let sender_clone = sender.clone();
 
     // Spawn a task to handle outgoing messages from the broadcast channel
     let mut send_task = tokio::spawn(async move {
@@ -46,7 +51,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             if let Ok(egress_bytes) =
                 adapter.egress(&serde_json::to_vec(&frame).unwrap_or_default())
             {
-                if sender.send(Message::Binary(egress_bytes)).await.is_err() {
+                let mut s = sender_clone.lock().await;
+                if s.send(Message::Binary(egress_bytes)).await.is_err() {
                     tracing::info!("AgentSocket disconnected during MELT stream.");
                     break;
                 }
@@ -57,14 +63,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // Spawn a task to handle incoming messages
     let melt_tx = state.melt_tx.clone();
     let state_clone = state.clone();
+    let sender_recv = sender.clone();
     let mut recv_task = tokio::spawn(async move {
         let adapter = McpAdapter::new(true);
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Binary(data) => {
                     tracing::info!("AgentSocket received binary frame: {} bytes", data.len());
-
-                    let span = Span::current();
 
                     // Map incoming payload to AgentSocketFrame intent via the Adapter
                     match adapter.ingress(&data) {
@@ -110,7 +115,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                                         &serde_json::to_vec(&resp_frame)
                                                             .unwrap_or_default(),
                                                     ) {
-                                                        let _ = sender
+                                                        let mut s = sender_recv.lock().await;
+                                                        let _ = s
                                                             .send(Message::Binary(egress_bytes))
                                                             .await;
                                                     }
@@ -138,7 +144,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                                         &serde_json::to_vec(&resp_frame)
                                                             .unwrap_or_default(),
                                                     ) {
-                                                        let _ = sender
+                                                        let mut s = sender_recv.lock().await;
+                                                        let _ = s
                                                             .send(Message::Binary(egress_bytes))
                                                             .await;
                                                     }
@@ -170,13 +177,6 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 }
 
 /// Core orchestration pipeline: Firewall → Analysis → Tool Discovery → Execution → Cost Arbitrage
-///
-/// This function replaces the previous hardcoded simulation and implements the real
-/// intent-to-task orchestration flow with full OpenTelemetry instrumentation.
-///
-/// # Returns
-/// - `Ok((execution_result, trace_id))` on success
-/// - `Err(String)` on failure
 #[instrument(
     name = "AgentSocket::orchestrate_intent",
     skip(state, raw_payload),
@@ -187,8 +187,8 @@ async fn orchestrate_intent(
     raw_payload: &[u8],
 ) -> Result<(Vec<u8>, String), String> {
     let start_time = Instant::now();
-    let trace_id = Span::current()
-        .context()
+    let otel_cx = Span::current().context();
+    let trace_id = otel_cx
         .span()
         .span_context()
         .trace_id()
@@ -199,52 +199,45 @@ async fn orchestrate_intent(
     info!("═══════════════════════════════════════════════════════════════════");
 
     // Stage 1: FIREWALL - Semantic Firewall Analysis
-    let trust_score = match state.firewall.analyze_intent(raw_payload) {
-        Ok(score) => {
+    match state.firewall.inspect_and_sanitize(raw_payload).await {
+        Ok(sanitized) => {
             info!(
-                trust_score = %score.score,
-                is_jailbreak = %score.is_jailbreak,
-                entropy = %score.entropy,
-                "Firewall analysis complete"
+                sanitized_len = %sanitized.len(),
+                "Firewall analysis passed"
             );
-            score
         }
-        Err(e) => return Err(format!("Firewall analysis failed: {}", e)),
+        Err(e) => return Err(format!("Firewall blocked request: {}", e)),
     };
-
-    // Check if intent is blocked
-    if trust_score.score < state.firewall.threshold {
-        return Err(format!(
-            "Intent blocked by firewall. Trust score {}/{} below threshold",
-            trust_score.score, state.firewall.threshold
-        ));
-    }
 
     info!("═══════════════════════════════════════════════════════════════════");
     info!("Stage 2/5: INTENT ANALYSIS (TinyTransformer)");
     info!("═══════════════════════════════════════════════════════════════════");
 
     // Stage 2: ANALYSIS - TinyTransformer Intent Analysis
-    let intent_ctx = match state.intent.analyze_intent(raw_payload).await {
-        Ok(ctx) => {
-            info!(
-                target_model = %ctx.target_model,
-                required_tools = ?ctx.required_tools,
-                token_budget = %ctx.token_budget,
-                "Intent analysis complete"
-            );
-            ctx
-        }
-        Err(e) => return Err(format!("Intent analysis failed: {}", e)),
+    // TinyTransformer.classify_api provides taxonomy classification
+    let payload_str = String::from_utf8_lossy(raw_payload).to_string();
+    let classification = state.intent.classify_api(&payload_str, "AgentSocket", "live-intent").await;
+    info!(
+        category = %classification.category,
+        name = %classification.name,
+        "Intent classification complete"
+    );
+
+    // Map classification to orchestration context
+    let target_model = if classification.category == "experience" {
+        "frontier-llm".to_string()
+    } else {
+        "local-slm-v5".to_string()
     };
+    let required_tools = vec!["default_aml_model".to_string()];
+    let token_budget: usize = 4096;
 
     info!("═══════════════════════════════════════════════════════════════════");
     info!("Stage 3/5: MCP TOOL DISCOVERY (Registry Lookup)");
     info!("═══════════════════════════════════════════════════════════════════");
 
     // Stage 3: TOOL DISCOVERY - MCPToolRegistry
-    let tool_name = intent_ctx
-        .required_tools
+    let tool_name = required_tools
         .first()
         .cloned()
         .unwrap_or_else(|| "default_aml_model".to_string());
@@ -259,29 +252,18 @@ async fn orchestrate_intent(
             );
             (meta, wasm)
         }
-        Err(e) => {
+        Err(_e) => {
             // If tool not found, create a minimal test WASM module
             info!("Tool not in registry, using default test WASM");
             let test_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-            (
-                state
-                    .mcp_registry
-                    .list_tools()
-                    .await
-                    .unwrap_or_default()
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        itt_core::MCPToolMetadata::new(
-                            tool_name.clone(),
-                            "1.0.0".to_string(),
-                            "Default test tool".to_string(),
-                            "abc123".to_string(),
-                            vec![],
-                        )
-                    }),
-                test_wasm,
-            )
+            let default_meta = itt_core::MCPToolMetadata::new(
+                tool_name.clone(),
+                "1.0.0".to_string(),
+                "Default test tool".to_string(),
+                "abc123".to_string(),
+                vec![],
+            );
+            (default_meta, test_wasm)
         }
     };
 
@@ -311,7 +293,7 @@ async fn orchestrate_intent(
         .evaluate_and_route(
             "default-tenant",
             50.0, // Estimated cost in INR
-            &intent_ctx.target_model,
+            &target_model,
             "local-slm", // Fallback model
         )
         .await
@@ -341,7 +323,6 @@ async fn orchestrate_intent(
     let response = json!({
         "execution_result": execution_result,
         "selected_model": selected_model,
-        "trust_score": trust_score.score,
         "execution_time_ms": execution_time_ms,
     });
 

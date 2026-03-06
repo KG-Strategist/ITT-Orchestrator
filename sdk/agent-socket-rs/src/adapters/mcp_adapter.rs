@@ -34,24 +34,32 @@ impl ProtocolAdapter for McpAdapter {
     type Error = McpAdapterError;
 
     fn ingress(&self, raw_payload: &[u8]) -> Result<Vec<u8>, Self::Error> {
-        // In a real implementation, this would parse an HTTP text block
-        // representing an MCP request and map it to an intent.
-
+        // Physicalized MCP Ingress: Parse Server-Sent Events (SSE) data blocks
         let req_text = String::from_utf8_lossy(raw_payload);
+        
+        // Extract the actual JSON payload from the SSE format: "data: {json}\n\n"
+        let data_payload = req_text
+            .lines()
+            .find(|line| line.starts_with("data: "))
+            .map(|line| line.trim_start_matches("data: ").trim())
+            .unwrap_or(req_text.as_ref());
 
-        // Simple stub translation
-        let frame = AgentSocketFrame::new(FrameType::Intent, req_text.as_bytes().to_vec());
+        let mut frame = AgentSocketFrame::new(FrameType::Intent, data_payload.as_bytes().to_vec());
+        frame.metadata = serde_json::json!({
+            "protocol": "MCP_SSE",
+            "experimental": self.allow_experimental_features
+        });
 
         serde_json::to_vec(&frame).map_err(|e| McpAdapterError::SerializationError(e.to_string()))
     }
 
     fn egress(&self, socket_frame: &[u8]) -> Result<Vec<u8>, Self::Error> {
-        // Transcode from Agent Socket binary frame back into SSE/HTTP text stream
-
+        // Physicalized MCP Egress: Transcode AgentSocket binary to strict SSE format
         let frame: AgentSocketFrame = serde_json::from_slice(socket_frame)
             .map_err(|e| McpAdapterError::ParseError(e.to_string()))?;
 
-        let sse_msg = format!("data: {}\n\n", String::from_utf8_lossy(&frame.payload));
+        // Format exactly as required by the Model Context Protocol
+        let sse_msg = format!("event: agent_socket_response\ndata: {}\n\n", String::from_utf8_lossy(&frame.payload));
         Ok(sse_msg.into_bytes())
     }
 }

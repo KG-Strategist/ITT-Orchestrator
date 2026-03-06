@@ -1,9 +1,9 @@
 use axum::{
-    body::{Body, Bytes},
+    body::Body,
     extract::Request,
     http::{header, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use http_body_util::BodyExt;
 use serde_json::json;
@@ -17,7 +17,8 @@ pub async fn governance_guardrails(req: Request<Body>, next: Next) -> Result<Res
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
 
     if !auth_header.starts_with("Bearer ") {
         tracing::error!("Governance Block: Missing or invalid Bearer token.");

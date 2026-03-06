@@ -10,7 +10,7 @@ use mongodb::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, instrument};
+use tracing::instrument;
 
 #[derive(Debug)]
 pub enum MemoryError {
@@ -252,6 +252,8 @@ impl GraphStore for Neo4jClient {
                 id: id as u64,
                 name: node.get("name").unwrap_or_default(),
                 description: node.get("description").unwrap_or_default(),
+                pattern: node.get("pattern").unwrap_or_default(),
+                token: node.get("token").unwrap_or_default(),
                 conditions: vec![],
                 actions: vec![],
                 priority: 0,

@@ -31,6 +31,11 @@ pub struct Zone {
 pub struct MdmRule {
     pub id: u64,
     pub name: String,
+    pub description: String,
     pub pattern: String,
     pub token: String,
+    pub conditions: Vec<String>,
+    pub actions: Vec<String>,
+    pub priority: i32,
+    pub is_active: bool,
 }

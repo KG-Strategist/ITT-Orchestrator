@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, User, KeyRound, AlertCircle, Server } from 'lucide-react';
 import { useAuthStore, CoERole } from '../store/authStore';
@@ -13,14 +13,21 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'sso' | 'local'>('local');
 
+  // On mount: check whether first-time setup is required
+  useEffect(() => {
+    api.get<{ setup_required: boolean }>(apiEndpoints.setup.status)
+      .then((data) => { if (data.setup_required) navigate('/setup', { replace: true }); })
+      .catch(() => {/* backend may not be up yet – stay on login */ });
+  }, [navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      const response = await api.post<{token: string, user: {id: string, username: string, name: string, role: CoERole}}>(apiEndpoints.auth.login, { username, password });
-      
+      const response = await api.post<{ token: string, user: { id: string, username: string, name: string, role: CoERole } }>(apiEndpoints.auth.login, { username, password });
+
       if (response && response.token && response.user) {
         login(response.user, response.token);
         navigate('/dashboard/executive');
@@ -50,26 +57,24 @@ const Login: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-          
+
           {/* Tabs */}
           <div className="flex border-b border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setActiveTab('sso')}
-              className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                activeTab === 'sso' 
-                  ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-b-2 border-cyan-500' 
-                  : 'bg-slate-50 dark:bg-slate-950/50 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'sso'
+                ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-b-2 border-cyan-500'
+                : 'bg-slate-50 dark:bg-slate-950/50 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
             >
               <Lock className="w-4 h-4" /> Enterprise SSO
             </button>
             <button
               onClick={() => setActiveTab('local')}
-              className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                activeTab === 'local' 
-                  ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-b-2 border-cyan-500' 
-                  : 'bg-slate-50 dark:bg-slate-950/50 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'local'
+                ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-b-2 border-cyan-500'
+                : 'bg-slate-50 dark:bg-slate-950/50 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
             >
               <Server className="w-4 h-4" /> Local Admin
             </button>
@@ -83,7 +88,7 @@ const Login: React.FC = () => {
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                   Authenticate using your corporate identity provider.
                 </p>
-                <button 
+                <button
                   disabled
                   className="w-full py-3 px-4 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed flex justify-center items-center gap-2"
                 >
@@ -103,11 +108,11 @@ const Login: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Username</label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="admin" 
+                      placeholder="admin (test credentials seeded)"
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg py-3 pl-10 pr-4 text-sm text-slate-900 dark:text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-all"
                       required
                     />
@@ -118,18 +123,18 @@ const Login: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Password</label>
                   <div className="relative">
                     <KeyRound className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••" 
+                      placeholder="••••••••"
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg py-3 pl-10 pr-4 text-sm text-slate-900 dark:text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-all"
                       required
                     />
                   </div>
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   disabled={isLoading}
                   className="w-full py-3 px-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] flex justify-center items-center gap-2 mt-6"

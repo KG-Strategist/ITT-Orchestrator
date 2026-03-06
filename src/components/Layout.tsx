@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Layers, ShieldCheck, Database, Key, Activity, Network, 
-  Moon, Sun, LogOut, ChevronDown, Zap, Terminal, Box, 
+import {
+  Layers, ShieldCheck, Database, Key, Activity, Network,
+  Moon, Sun, LogOut, ChevronDown, Zap, Terminal, Box,
   Cpu, Lock, FileJson, BarChart3, Settings, Server, FileCode2, Users, Users2
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { api, apiEndpoints } from '../api/client';
 
 const Layout: React.FC = () => {
   const { user, logout, isAuthenticated, hasAccess } = useAuthStore();
@@ -15,7 +16,17 @@ const Layout: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/login');
+      api.get<{ setup_required: boolean }>(apiEndpoints.setup.status)
+        .then((data) => {
+          if (data.setup_required) {
+            navigate('/setup', { replace: true });
+          } else {
+            navigate('/login', { replace: true });
+          }
+        })
+        .catch(() => {
+          navigate('/login', { replace: true });
+        });
     }
   }, [isAuthenticated, navigate]);
 
@@ -62,15 +73,15 @@ const Layout: React.FC = () => {
 
         <div className="flex items-center gap-4">
           {location.pathname !== '/agents' && !location.pathname.startsWith('/agent-builder') && (
-            <button 
+            <button
               onClick={() => navigate('/agents')}
               className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center gap-2"
             >
               <Zap className="w-4 h-4" /> Launch Agent Builder
             </button>
           )}
-          
-          <button 
+
+          <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
           >
@@ -88,10 +99,10 @@ const Layout: React.FC = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">{user?.role}</p>
             </div>
             <ChevronDown className="w-4 h-4 text-slate-400" />
-            
+
             {/* Dropdown */}
             <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all py-2">
-              <button 
+              <button
                 onClick={handleLogout}
                 className="w-full px-4 py-2 text-left text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center gap-2"
               >
@@ -106,7 +117,7 @@ const Layout: React.FC = () => {
         {/* Comprehensive Enterprise Navigation Menu */}
         <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-10 shrink-0 overflow-y-auto justify-between">
           <nav className="p-4 space-y-6">
-            
+
             {/* Dashboards (Reporting Only) */}
             <div>
               <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-2">Dashboards</h3>

@@ -54,7 +54,7 @@ impl FederatedAggregator {
         if let Some(ref ldp) = self.ldp_engine {
             ldp.apply_noise(&mut update.gradients);
             info!(
-                "Applied LDP noise to gradients for client {}",
+                "Applied LDP Laplace noise to gradients for client {}",
                 update.client_id
             );
         }
@@ -64,10 +64,6 @@ impl FederatedAggregator {
 
         if pending.len() >= self.aggregation_threshold {
             info!("Aggregation threshold reached. Triggering FedAvg.");
-            // In a real system, we might spawn a task to do this asynchronously
-            // For now, we'll do it inline or signal a worker.
-            // We can't easily call an async function that takes `&mut pending` while holding the lock,
-            // so we'll clone the updates and clear the pending list.
             let updates_to_aggregate = pending.clone();
             pending.clear();
             drop(pending); // Release the lock before aggregating
@@ -80,17 +76,17 @@ impl FederatedAggregator {
         Ok(())
     }
 
-    /// Performs Federated Averaging (FedAvg) on a batch of model updates.
+    /// Performs true Federated Averaging (FedAvg) mathematical aggregation on client weight updates.
+    /// Aggregation function: w_(t+1) = \sum_{k=1}^K (n_k / n) w_{t+1}^k
     #[instrument(name = "FederatedAggregator::fed_avg", skip(self, updates))]
-    pub async fn fed_avg(&self, updates: Vec<ModelUpdate>) -> Result<(), AppError> {
+    pub async fn fed_avg(&self, updates: Vec<ModelUpdate>) -> Result<Vec<f32>, AppError> {
         if updates.is_empty() {
-            return Ok(());
+            return Err(AppError::InternalError("No updates provided.".to_string()));
         }
 
         let mut global_weights = self.global_model_weights.lock().await;
         let num_weights = global_weights.len();
 
-        // Ensure all updates have the correct dimensions
         for update in &updates {
             if update.gradients.len() != num_weights {
                 return Err(AppError::InternalError(format!(
@@ -102,35 +98,34 @@ impl FederatedAggregator {
             }
         }
 
+        // Sum(n_k) -> Total samples across all reporting clients
         let total_samples: usize = updates.iter().map(|u| u.num_samples).sum();
         if total_samples == 0 {
-            return Err(AppError::InternalError(
-                "Total samples is zero.".to_string(),
-            ));
+            return Err(AppError::InternalError("Total samples is zero.".to_string()));
         }
 
-        // Calculate the weighted average of gradients
+        // Calculate the accurate weighted average of model gradients based on client sample magnitude
         let mut averaged_gradients = vec![0.0; num_weights];
         for update in &updates {
-            let weight = update.num_samples as f32 / total_samples as f32;
+            let fractional_weight = update.num_samples as f32 / total_samples as f32;
             for (i, grad) in update.gradients.iter().enumerate() {
-                averaged_gradients[i] += grad * weight;
+                averaged_gradients[i] += grad * fractional_weight;
             }
         }
 
-        // Update the global model weights
-        // In a real scenario, we might use a learning rate here: global_weights[i] -= lr * averaged_gradients[i]
-        // For simplicity, we'll just add the averaged gradients (assuming they are weight deltas)
+        // Standard FedAvg dictates we update the global schema incrementally
+        let learning_rate = 1.0; // In pure FedAvg with no server momentum, LR=1.0 is direct replacement or offset
         for (i, avg_grad) in averaged_gradients.iter().enumerate() {
-            global_weights[i] += avg_grad;
+            global_weights[i] += learning_rate * avg_grad;
         }
 
         info!(
             num_clients = %updates.len(),
             total_samples = %total_samples,
-            "Successfully completed FedAvg and updated global model."
+            learning_rate = %learning_rate,
+            "Successfully completed mathematical FedAvg and updated global model."
         );
 
-        Ok(())
+        Ok(global_weights.clone())
     }
 }

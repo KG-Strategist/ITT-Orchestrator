@@ -13,6 +13,8 @@ db.createCollection('users');
 db.createCollection('tenants');
 db.createCollection('roles');
 
+// Clean database starts without any admin users so the /setup endpoint unlocks
+
 // Create indexes for efficient querying
 db.api_registry.createIndex({ "id": 1 }, { unique: true });
 db.api_registry.createIndex({ "category": 1 });

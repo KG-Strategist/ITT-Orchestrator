@@ -49,7 +49,7 @@ import {
 } from './CustomNodes';
 import { SpanTimeline } from './SpanTimeline';
 import { useJaegerSpans } from '../../hooks/useJaegerSpans';
-import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2, Zap, ShieldAlert } from 'lucide-react';
+import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2, Zap, ShieldAlert, Cpu, Shield, Radio } from 'lucide-react';
 import { useOrchestratorStore } from '../../store/orchestratorStore';
 import { api } from '../../api/client';
 
@@ -107,12 +107,12 @@ const AgentBuilderContent: React.FC = () => {
   const [isDeploying, setIsDeploying] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [wsStatus, setWsStatus] = useState('Connecting...');
-  
+
   const [activeTab, setActiveTab] = useState<'components' | 'catalog'>('components');
   const [selectedNode, setSelectedNode] = useState<import('@xyflow/react').Node | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [simulationLogs, setSimulationLogs] = useState<{text: string, color: string}[]>([]);
+  const [simulationLogs, setSimulationLogs] = useState<{ text: string, color: string }[]>([]);
   const [showDeployMenu, setShowDeployMenu] = useState(false);
   const [isMeltConnected, setIsMeltConnected] = useState(false);
   const [activeTerminalTab, setActiveTerminalTab] = useState<'logs' | 'traces'>('logs');
@@ -121,7 +121,7 @@ const AgentBuilderContent: React.FC = () => {
   const [traceId, setTraceId] = useState<string | null>(null);
   const { segments, loading: traceLoading, error: traceError } = useJaegerSpans(traceId || '');
   const { generateAgentDAG } = useOrchestratorStore();
-  
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
@@ -172,34 +172,34 @@ const AgentBuilderContent: React.FC = () => {
     const wsUrl = `${protocol}//${host}/v1/agent-socket`;
 
     const ws = new WebSocket(wsUrl);
-    
+
     ws.onopen = () => {
       setWsStatus('Connected (<10ms latency)');
     };
-    
+
     ws.onmessage = async (event) => {
       try {
         // Handle binary frames (Blob)
         if (event.data instanceof Blob) {
           const text = await event.data.text();
           const data = JSON.parse(text);
-          
+
           if (data.type === 'log') {
             setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
           } else if (data.type === 'status') {
-             if (data.status === 'complete') {
-                 setIsSimulating(false);
-             }
+            if (data.status === 'complete') {
+              setIsSimulating(false);
+            }
           }
         } else {
-           // Fallback for text frames if any
-           const data = JSON.parse(event.data);
-           if (data.type === 'log') {
-             setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
-           } else if (data.type === 'status') {
-             if (data.status === 'complete') {
-                 setIsSimulating(false);
-             }
+          // Fallback for text frames if any
+          const data = JSON.parse(event.data);
+          if (data.type === 'log') {
+            setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
+          } else if (data.type === 'status') {
+            if (data.status === 'complete') {
+              setIsSimulating(false);
+            }
           }
         }
       } catch (e) {
@@ -211,7 +211,7 @@ const AgentBuilderContent: React.FC = () => {
       setWsStatus('Connection Error');
       setIsSimulating(false);
     };
-    
+
     ws.onclose = () => {
       setWsStatus('Disconnected');
       setIsSimulating(false);
@@ -252,16 +252,20 @@ const AgentBuilderContent: React.FC = () => {
         x: event.clientX,
         y: event.clientY,
       });
-      
+
       let data: Record<string, unknown> = {};
       if (type === 'mcpTool' && toolName) {
         data = { toolName };
+      } else if (type === 'mcpTool') {
+        data = { toolName: 'MCP Tool', teeEnabled: false, teeProvider: 'nitro' };
       } else if (type === 'intentTrigger') {
         data = { label: 'New Intent' };
       } else if (type === 'semanticFirewall') {
         data = { threshold: '0.95' };
       } else if (type === 'tokenBudget') {
         data = { budget: '10.00' };
+      } else if (type === 'sovereignSidecar') {
+        data = { ebpfEnabled: false, gpuEnabled: false };
       }
 
       const newNode = {
@@ -307,14 +311,14 @@ const AgentBuilderContent: React.FC = () => {
     setShowTerminal(true);
     setIsSimulating(true);
     setSimulationLogs([]);
-    
+
     // Determine the correct WebSocket URL based on the current origin
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/v1/agent-socket`;
 
     const ws = new WebSocket(wsUrl);
-    
+
     ws.onopen = () => {
       setWsStatus('Connected (<10ms latency)');
       // Send a binary frame to start the simulation
@@ -322,7 +326,7 @@ const AgentBuilderContent: React.FC = () => {
       const encoder = new TextEncoder();
       ws.send(encoder.encode(payload));
     };
-    
+
     ws.onmessage = async (event) => {
       try {
         // Handle binary frames (Blob)
@@ -338,32 +342,32 @@ const AgentBuilderContent: React.FC = () => {
           if (data.type === 'log') {
             setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
           } else if (data.type === 'status') {
-             if (data.status === 'complete') {
-                 setIsSimulating(false);
-                 ws.close();
-             }
+            if (data.status === 'complete') {
+              setIsSimulating(false);
+              ws.close();
+            }
           } else if (data.status === 'success') {
-             // Real orchestration response with trace_id
-             setSimulationLogs(prev => [...prev, {
-               text: `✅ Orchestration Success | Trace ID: ${data.trace_id}`,
-               color: 'text-emerald-400'
-             }]);
-             setIsSimulating(false);
-             ws.close();
+            // Real orchestration response with trace_id
+            setSimulationLogs(prev => [...prev, {
+              text: `✅ Orchestration Success | Trace ID: ${data.trace_id}`,
+              color: 'text-emerald-400'
+            }]);
+            setIsSimulating(false);
+            ws.close();
           }
         } else {
-           // Fallback for text frames if any
-           const data = JSON.parse(event.data);
-           if (data.trace_id && !traceId) {
-             setTraceId(data.trace_id);
-           }
-           if (data.type === 'log') {
-             setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
-           } else if (data.type === 'status') {
-             if (data.status === 'complete') {
-                 setIsSimulating(false);
-                 ws.close();
-             }
+          // Fallback for text frames if any
+          const data = JSON.parse(event.data);
+          if (data.trace_id && !traceId) {
+            setTraceId(data.trace_id);
+          }
+          if (data.type === 'log') {
+            setSimulationLogs(prev => [...prev, { text: data.message, color: data.color || 'text-slate-300' }]);
+          } else if (data.type === 'status') {
+            if (data.status === 'complete') {
+              setIsSimulating(false);
+              ws.close();
+            }
           }
         }
       } catch (e) {
@@ -375,7 +379,7 @@ const AgentBuilderContent: React.FC = () => {
       setWsStatus('Connection Error');
       setIsSimulating(false);
     };
-    
+
     ws.onclose = () => {
       setWsStatus('Disconnected');
       setIsSimulating(false);
@@ -393,21 +397,41 @@ spec:
   protocol: AgentSocket
   finops_budget: 500.00
   dpdp_masking_required: true
+  identity_provider:
+    protocol: OIDC
+    issuer_url: "# Configured via Marketplace → Identity Providers"
+    client_id: "# Injected from store"
+    client_secret_vault_path: "secret/data/prod/idp/client-secret"
+  protocol_adapters:
+    - type: "# Configured via Marketplace → Protocol Adapters"
+      broker_url: "# Injected from store"
+      port: 9092
+  hardware:
+    tee_enabled: ${nodes.some(n => (n.data as NodeData).teeEnabled)}
+    tee_provider: ${nodes.find(n => (n.data as NodeData).teeEnabled) ? `"${(nodes.find(n => (n.data as NodeData).teeEnabled)?.data as NodeData).teeProvider || 'nitro'}"` : '"none"'}
+    ebpf_enabled: ${nodes.some(n => (n.data as NodeData).ebpfEnabled)}
+    gpu_enabled: ${nodes.some(n => (n.data as NodeData).gpuEnabled)}
   nodes:
 ${nodes.map(n => {
-  let nodeYaml = `    - id: ${n.id}\n      type: ${n.type}`;
-  if (n.type === 'tokenBudget') {
-    nodeYaml += `\n      budget_inr: ${(n.data as NodeData).budget || '10.00'}`;
-    nodeYaml += `\n      fallback_model: ${(n.data as NodeData).fallbackModel || 'llama-3-8b-local'}`;
-  } else if (n.type === 'semanticFirewall') {
-    nodeYaml += `\n      trust_threshold: ${(n.data as NodeData).threshold || '85'}`;
-  } else if (n.type === 'federatedLearner') {
-    nodeYaml += `\n      he_enabled: ${(n.data as NodeData).heEnabled ? 'true' : 'false'}`;
-    nodeYaml += `\n      ldp_enabled: ${(n.data as NodeData).ldpEnabled ? 'true' : 'false'}`;
-    nodeYaml += `\n      zkp_enabled: ${(n.data as NodeData).zkpEnabled ? 'true' : 'false'}`;
-  }
-  return nodeYaml;
-}).join('\n')}
+      let nodeYaml = `    - id: ${n.id}\n      type: ${n.type}`;
+      if (n.type === 'tokenBudget') {
+        nodeYaml += `\n      budget_inr: ${(n.data as NodeData).budget || '10.00'}`;
+        nodeYaml += `\n      fallback_model: ${(n.data as NodeData).fallbackModel || 'llama-3-8b-local'}`;
+      } else if (n.type === 'semanticFirewall') {
+        nodeYaml += `\n      trust_threshold: ${(n.data as NodeData).threshold || '85'}`;
+      } else if (n.type === 'federatedLearner') {
+        nodeYaml += `\n      he_enabled: ${(n.data as NodeData).heEnabled ? 'true' : 'false'}`;
+        nodeYaml += `\n      ldp_enabled: ${(n.data as NodeData).ldpEnabled ? 'true' : 'false'}`;
+        nodeYaml += `\n      zkp_enabled: ${(n.data as NodeData).zkpEnabled ? 'true' : 'false'}`;
+      } else if (n.type === 'mcpTool') {
+        nodeYaml += `\n      tee_enabled: ${(n.data as NodeData).teeEnabled ? 'true' : 'false'}`;
+        nodeYaml += `\n      tee_provider: ${(n.data as NodeData).teeProvider || 'nitro'}`;
+      } else if (n.type === 'sovereignSidecar') {
+        nodeYaml += `\n      ebpf_enabled: ${(n.data as NodeData).ebpfEnabled ? 'true' : 'false'}`;
+        nodeYaml += `\n      gpu_enabled: ${(n.data as NodeData).gpuEnabled ? 'true' : 'false'}`;
+      }
+      return nodeYaml;
+    }).join('\n')}
 `;
   };
 
@@ -434,20 +458,20 @@ ${nodes.map(n => {
       {/* Sidebar */}
       <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col z-10 shrink-0">
         <div className="flex border-b border-slate-800 shrink-0">
-          <button 
-            onClick={() => setActiveTab('components')} 
+          <button
+            onClick={() => setActiveTab('components')}
             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'components' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/50' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Components
           </button>
-          <button 
-            onClick={() => setActiveTab('catalog')} 
+          <button
+            onClick={() => setActiveTab('catalog')}
             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'catalog' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/50' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Service Catalog
           </button>
         </div>
-        
+
         <div className="p-4 space-y-6 flex-1 overflow-y-auto">
           {activeTab === 'components' ? (
             <>
@@ -600,7 +624,7 @@ ${nodes.map(n => {
           >
             <Background color="#1e293b" gap={20} size={2} />
             <Controls className="bg-slate-900 border-slate-800 fill-slate-400" />
-            <MiniMap 
+            <MiniMap
               nodeColor={(node) => {
                 switch (node.type) {
                   case 'intentTrigger': return '#6366f1';
@@ -621,14 +645,14 @@ ${nodes.map(n => {
               maskColor="rgba(15, 23, 42, 0.8)"
               className="bg-slate-900 border-slate-800"
             />
-            
+
             <Panel position="top-left" className="m-4">
               <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg p-3 shadow-xl space-y-2">
                 <div>
                   <h2 className="text-sm font-bold text-white mb-1">Project Aurora</h2>
                   <p className="text-xs text-slate-400">Federated AML Detection Template</p>
                 </div>
-                <button 
+                <button
                   onClick={loadAuroraTemplate}
                   className="w-full px-3 py-1.5 bg-violet-600/20 hover:bg-violet-600/40 text-violet-300 border border-violet-500/30 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2"
                 >
@@ -639,16 +663,16 @@ ${nodes.map(n => {
             </Panel>
 
             <Panel position="top-right" className="flex gap-3 m-4">
-              <button 
+              <button
                 onClick={runSimulation}
                 disabled={isSimulating}
                 className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-900 dark:text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 border border-slate-200 dark:border-slate-700 shadow-sm"
               >
                 <Activity className="w-4 h-4 text-emerald-500 dark:text-emerald-400" /> Run Simulation
               </button>
-              
+
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setShowDeployMenu(!showDeployMenu)}
                   disabled={isDeploying || isSimulating}
                   className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)] flex items-center gap-2"
@@ -665,7 +689,7 @@ ${nodes.map(n => {
                 {showDeployMenu && (
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-50">
                     <div className="p-2 space-y-1">
-                      <button 
+                      <button
                         onClick={() => {
                           setShowDeployMenu(false);
                           handleDeploy();
@@ -678,7 +702,7 @@ ${nodes.map(n => {
                           <div className="text-xs text-slate-500">Push to edge via GitOps</div>
                         </div>
                       </button>
-                      
+
                       <button
                         onClick={() => {
                           setShowDeployMenu(false);
@@ -695,7 +719,7 @@ ${nodes.map(n => {
 
                       <div className="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
 
-                      <button 
+                      <button
                         onClick={() => {
                           setIsMeltConnected(!isMeltConnected);
                           setShowDeployMenu(false);
@@ -743,21 +767,19 @@ ${nodes.map(n => {
                 <div className="flex gap-2 border-l border-slate-700 pl-4">
                   <button
                     onClick={() => setActiveTerminalTab('logs')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition ${
-                      activeTerminalTab === 'logs'
+                    className={`px-3 py-1 text-xs font-medium rounded transition ${activeTerminalTab === 'logs'
                         ? 'bg-slate-700 text-slate-100'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Logs
                   </button>
                   <button
                     onClick={() => setActiveTerminalTab('traces')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition ${
-                      activeTerminalTab === 'traces'
+                    className={`px-3 py-1 text-xs font-medium rounded transition ${activeTerminalTab === 'traces'
                         ? 'bg-slate-700 text-slate-100'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Orchestration Trace
                     {traceId && <span className="ml-1 text-emerald-400">✓</span>}
@@ -814,15 +836,15 @@ ${nodes.map(n => {
         <aside className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col z-10 shrink-0">
           <div className="p-4 border-b border-slate-800 flex justify-between items-center">
             <h3 className="font-bold text-white flex items-center gap-2">
-              {selectedNode.type === 'federatedLearner' && <BrainCircuit className="w-4 h-4 text-violet-400"/>}
-              {selectedNode.type === 'tokenBudget' && <Zap className="w-4 h-4 text-emerald-400"/>}
-              {selectedNode.type === 'semanticFirewall' && <ShieldAlert className="w-4 h-4 text-rose-400"/>}
+              {selectedNode.type === 'federatedLearner' && <BrainCircuit className="w-4 h-4 text-violet-400" />}
+              {selectedNode.type === 'tokenBudget' && <Zap className="w-4 h-4 text-emerald-400" />}
+              {selectedNode.type === 'semanticFirewall' && <ShieldAlert className="w-4 h-4 text-rose-400" />}
               Node Properties
             </h3>
-            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white" aria-label="Close properties panel" title="Close"><X className="w-4 h-4"/></button>
+            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white" aria-label="Close properties panel" title="Close"><X className="w-4 h-4" /></button>
           </div>
           <div className="p-4 space-y-6 flex-1 overflow-y-auto">
-            
+
             {/* Federated Learner Properties */}
             {selectedNode.type === 'federatedLearner' && (
               <>
@@ -832,13 +854,13 @@ ${nodes.map(n => {
                     CAL 4 (Decentralized National & Cross-Border)
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Privacy Controls</h4>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">Homomorphic Encryption (HE)</span>
-                    <div 
+                    <div
                       onClick={() => {
                         setNodes(nds => nds.map(n => {
                           if (n.id === selectedNode.id) {
@@ -852,10 +874,10 @@ ${nodes.map(n => {
                       <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${selectedNode.data.heEnabled ? 'right-1' : 'left-1'}`}></div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">Local Differential Privacy (LDP)</span>
-                    <div 
+                    <div
                       onClick={() => {
                         setNodes(nds => nds.map(n => {
                           if (n.id === selectedNode.id) {
@@ -869,10 +891,10 @@ ${nodes.map(n => {
                       <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${selectedNode.data.ldpEnabled ? 'right-1' : 'left-1'}`}></div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-300">ZKP Audit Trailing</span>
-                    <div 
+                    <div
                       onClick={() => {
                         setNodes(nds => nds.map(n => {
                           if (n.id === selectedNode.id) {
@@ -984,6 +1006,143 @@ ${nodes.map(n => {
               </>
             )}
 
+            {/* ── MCP Tool (Secure Execution Sandbox) ── TEE Toggle ── */}
+            {selectedNode.type === 'mcpTool' && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">MCP Tool Execution</h4>
+                  <div className="bg-slate-950 border border-slate-800 rounded p-2 text-sm text-cyan-300 font-mono">
+                    {(selectedNode.data as NodeData).toolName || 'WASM Module'}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Hardware Security</h4>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-amber-400" />
+                      <span className="text-sm text-slate-300">Confidential Computing (TEE)</span>
+                    </div>
+                    <div
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, teeEnabled: !n.data.teeEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${(selectedNode.data as NodeData).teeEnabled ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${(selectedNode.data as NodeData).teeEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                    </div>
+                  </div>
+
+                  {(selectedNode.data as NodeData).teeEnabled && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1" htmlFor="tee-provider">TEE Provider</label>
+                      <select
+                        id="tee-provider"
+                        value={(selectedNode.data as NodeData).teeProvider as string || 'nitro'}
+                        onChange={(e) => {
+                          setNodes(nds => nds.map(n => {
+                            if (n.id === selectedNode.id) {
+                              return { ...n, data: { ...n.data, teeProvider: e.target.value } };
+                            }
+                            return n;
+                          }));
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-amber-300 focus:outline-none focus:border-amber-500"
+                      >
+                        <option value="nitro">AWS Nitro Enclaves</option>
+                        <option value="sgx">Intel SGX</option>
+                        <option value="azure">Azure Confidential Compute</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-xs text-amber-300 leading-relaxed">
+                    <strong className="text-amber-400">TEE Mode:</strong> When enabled, WASM execution occurs inside a hardware-isolated enclave. Cryptographic attestation verifies code integrity before execution.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── Sovereign Sidecar ── eBPF + GPU Toggles ── */}
+            {selectedNode.type === 'sovereignSidecar' && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Sovereign Edge Agent</h4>
+                  <div className="bg-slate-950 border border-slate-800 rounded p-2 text-sm text-teal-300 font-mono">
+                    OBRH Sidecar • Zone 2
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Kernel & Hardware Acceleration</h4>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-rose-400" />
+                      <span className="text-sm text-slate-300">eBPF Kernel Interception</span>
+                    </div>
+                    <div
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, ebpfEnabled: !n.data.ebpfEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${(selectedNode.data as NodeData).ebpfEnabled ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${(selectedNode.data as NodeData).ebpfEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-violet-400" />
+                      <span className="text-sm text-slate-300">GPU Acceleration</span>
+                    </div>
+                    <div
+                      onClick={() => {
+                        setNodes(nds => nds.map(n => {
+                          if (n.id === selectedNode.id) {
+                            return { ...n, data: { ...n.data, gpuEnabled: !n.data.gpuEnabled } };
+                          }
+                          return n;
+                        }));
+                      }}
+                      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${(selectedNode.data as NodeData).gpuEnabled ? 'bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${(selectedNode.data as NodeData).gpuEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                    </div>
+                  </div>
+                </div>
+
+                {(selectedNode.data as NodeData).ebpfEnabled && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
+                    <p className="text-xs text-rose-300 leading-relaxed">
+                      <strong className="text-rose-400">eBPF Mode:</strong> Attaches BPF programs to kernel network hooks for sub-microsecond packet inspection and syscall monitoring. Requires Linux kernel 5.10+.
+                    </p>
+                  </div>
+                )}
+
+                {(selectedNode.data as NodeData).gpuEnabled && (
+                  <div className="p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
+                    <p className="text-xs text-violet-300 leading-relaxed">
+                      <strong className="text-violet-400">GPU Mode:</strong> Routes SLM inference (Phi-3, Llama-3 8B) to local NVIDIA/TPU hardware for sub-200ms edge response times.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
         </aside>
       )}
@@ -1001,7 +1160,7 @@ ${nodes.map(n => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
               {/* YAML Manifest */}
               <div className="flex-1 border-r border-slate-800 flex flex-col">
@@ -1014,7 +1173,7 @@ ${nodes.map(n => {
                   </pre>
                 </div>
               </div>
-              
+
               {/* OPA Audit Log */}
               <div className="flex-1 flex flex-col">
                 <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -1027,7 +1186,7 @@ ${nodes.map(n => {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-4 border-t border-slate-800 bg-slate-950 text-right">
               <button onClick={() => setShowAuditModal(false)} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">
                 Close

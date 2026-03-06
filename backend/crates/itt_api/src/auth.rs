@@ -1,7 +1,6 @@
 use axum::{
     async_trait,
-    extract::{FromRequestParts, TypedHeader},
-    headers::{authorization::Bearer, Authorization},
+    extract::{FromRequestParts, State},
     http::request::Parts,
     middleware::Next,
     response::IntoResponse,
@@ -124,16 +123,23 @@ where
 {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Try to extract Bearer token
-        let TypedHeader(Authorization::<Bearer>(bearer)) =
-            TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
-                .await
-                .map_err(|_| ApiError::Unauthorized {
-                    message: "Missing authorization header".to_string(),
-                })?;
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // Extract Bearer token from Authorization header
+        let auth_header = parts
+            .headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| ApiError::Unauthorized {
+                message: "Missing authorization header".to_string(),
+            })?;
 
-        let token = bearer.0.to_string();
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| ApiError::Unauthorized {
+                message: "Invalid authorization header format".to_string(),
+            })?
+            .trim()
+            .to_string();
 
         // Get JWT manager from extensions (should be added in main.rs)
         let jwt_manager = parts
@@ -180,11 +186,11 @@ pub async fn role_check_middleware(
         .await)
 }
 
-/// Login endpoint
+/// Login endpoint — authenticates against MongoDB user store
 pub async fn login(
+    State(state): State<Arc<crate::AppState>>,
     Json(payload): Json<LoginRequest>,
-    Extension(jwt_manager): Extension<Arc<JwtManager>>,
-) -> Result<Json<LoginResponse>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     tracing::info!("Login attempt for user: {}", payload.username);
 
     if payload.password.is_empty() {
@@ -194,47 +200,63 @@ pub async fn login(
         });
     }
 
-    // In a real enterprise system, this would integrate with an Identity Provider (IdP)
-    // like Okta, Ping Identity, or Active Directory via SAML/OIDC.
-    // For this open-source release, we use a basic validation against environment variables
-    // or a secure database. Here we simulate a secure check.
-    let is_valid_admin = payload.username == "admin"
-        && payload.password
-            == std::env::var("ADMIN_PASSWORD")
-                .unwrap_or_else(|_| "secure_admin_pass_123!".to_string());
-    let is_valid_user = payload.username == "user"
-        && payload.password
-            == std::env::var("USER_PASSWORD")
-                .unwrap_or_else(|_| "secure_user_pass_123!".to_string());
+    // Look up user from MongoDB
+    let user = state
+        .user_store
+        .find_by_username(&payload.username)
+        .await
+        .map_err(|e| ApiError::InternalServerError {
+            message: format!("Database error: {}", e),
+            details: None,
+        })?
+        .ok_or_else(|| ApiError::Unauthorized {
+            message: "Invalid credentials".to_string(),
+        })?;
 
-    if !is_valid_admin && !is_valid_user {
+    // CRITICAL: Verify password via bcrypt in a blocking task
+    let is_valid = crate::user_store::UserStore::verify_password(
+        &payload.password,
+        &user.password_hash,
+    )
+    .await
+    .map_err(|e| ApiError::InternalServerError {
+        message: format!("Password verification error: {}", e),
+        details: None,
+    })?;
+
+    if !is_valid {
         return Err(ApiError::Unauthorized {
             message: "Invalid credentials".to_string(),
         });
     }
 
-    let roles = if is_valid_admin {
-        vec!["admin".to_string(), "user".to_string()]
-    } else {
-        vec!["user".to_string()]
+    // Issue JWT with actual roles from the database
+    let roles = match user.role {
+        crate::user_store::CoERole::CoE_Super_Admin => {
+            vec!["admin".to_string(), "user".to_string()]
+        }
+        _ => vec!["user".to_string()],
     };
 
-    let token = jwt_manager
-        .create_token(
-            &format!("user_{}", payload.username),
-            &format!("{}@example.com", payload.username),
-            roles,
-        )
+    let token = state
+        .jwt_manager
+        .create_token(&user.id, &user.email, roles)
         .map_err(|e| ApiError::InternalServerError {
             message: e,
             details: None,
         })?;
 
-    Ok(Json(LoginResponse {
-        token,
-        expires_in: 86400, // 24 hours in seconds
-        token_type: "Bearer".to_string(),
-    }))
+    Ok(Json(serde_json::json!({
+        "token": token,
+        "expires_in": 86400,
+        "token_type": "Bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "name": user.full_name,
+            "role": user.role.to_string(),
+        }
+    })))
 }
 
 /// Helper to parse duration strings like "24h", "7d"
@@ -259,12 +281,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     }
 }
 
-/// Create authentication routes
-pub fn create_auth_routes(jwt_manager: Arc<JwtManager>) -> Router {
-    Router::new()
-        .route("/login", post(login))
-        .layer(Extension(jwt_manager))
-}
+/// Authentication routes are now registered as public routes in main.rs.
 
 #[cfg(test)]
 mod tests {

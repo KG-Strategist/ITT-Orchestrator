@@ -129,6 +129,10 @@ export const apiEndpoints = {
     logout: '/auth/logout',
     refresh: '/auth/refresh',
   },
+  setup: {
+    status: '/setup/status',
+    init: '/setup/init',
+  },
   registry: {
     list: '/registry',
     get: (id: string) => `/registry/${id}`,
