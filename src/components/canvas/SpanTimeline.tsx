@@ -1,5 +1,5 @@
 import React from 'react';
-import { SpanSegment } from '../hooks/useJaegerSpans';
+import { SpanSegment } from '../../hooks/useJaegerSpans';
 
 interface SpanTimelineProps {
   segments: SpanSegment[];
@@ -76,6 +76,12 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({ segments, loading, e
 
       {/* Timeline bars */}
       <div className="space-y-3">
+        <style>{segments.map((_, idx) => {
+          const relativeStart = segments[idx].startTime - minStart;
+          const leftPercent = (relativeStart / maxDuration) * 100;
+          const widthPercent = (segments[idx].duration / maxDuration) * 100;
+          return `.span-bar-${idx} { left: ${leftPercent}%; width: ${Math.max(widthPercent, 2)}%; }`;
+        }).join('\n')}</style>
         {segments.map((segment, idx) => {
           const relativeStart = segment.startTime - minStart;
           const leftPercent = (relativeStart / maxDuration) * 100;
@@ -83,13 +89,9 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({ segments, loading, e
 
           return (
             <div key={idx} className="relative h-8 bg-slate-800 rounded overflow-hidden">
-              {/* Background bar */}
+              {/* Background bar - styles moved to external style tag */}
               <div
-                className={`absolute top-0 h-full ${segment.color} opacity-70 transition-opacity hover:opacity-90 cursor-pointer`}
-                style={{
-                  left: `${leftPercent}%`,
-                  width: `${Math.max(widthPercent, 2)}%`, // Minimum 2% width for visibility
-                }}
+                className={`span-bar-${idx} absolute top-0 h-full ${segment.color} opacity-70 transition-opacity hover:opacity-90 cursor-pointer`}
                 title={`${segment.operationName}: ${segment.duration.toFixed(2)}ms`}
               ></div>
 

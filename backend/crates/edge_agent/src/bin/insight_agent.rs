@@ -131,10 +131,12 @@ impl InsightAgent {
     }
 
     /// Sync policies from Control Plane via HTTP
-    async fn sync_policies_from_control_plane(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn sync_policies_from_control_plane(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let url = format!("{}/api/v1/policies", self.control_plane_url);
-        let response = reqwest::get(&url).await?;
-        let policies: Vec<PolicyRule> = response.json().await?;
+        let response = reqwest::get(&url).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+        let policies: Vec<PolicyRule> = response.json().await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
         for policy in policies {
             self.policy_cache.insert(policy.id.clone(), policy);
@@ -148,7 +150,7 @@ impl InsightAgent {
     pub async fn evaluate_policy(
         &self,
         intent_payload: &[u8],
-    ) -> Result<PolicyDecision, Box<dyn std::error::Error>> {
+    ) -> Result<PolicyDecision, Box<dyn std::error::Error + Send>> {
         let start_time = std::time::Instant::now();
 
         // Parse intent (normally would deserialize from payload)
@@ -178,10 +180,11 @@ impl InsightAgent {
     pub async fn emit_telemetry(
         &self,
         event: TelemetryEvent,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let url = format!("{}/api/v1/telemetry", self.control_plane_url);
         let client = reqwest::Client::new();
-        client.post(&url).json(&event).send().await?;
+        client.post(&url).json(&event).send().await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
         info!("Telemetry emitted: {}", event.event_type);
         Ok(())

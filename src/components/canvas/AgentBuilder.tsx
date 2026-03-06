@@ -15,6 +15,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import { NodeData } from '../../types';
+
 import {
   IntentTriggerNode,
   SemanticFirewallNode,
@@ -47,7 +49,7 @@ import {
 } from './CustomNodes';
 import { SpanTimeline } from './SpanTimeline';
 import { useJaegerSpans } from '../../hooks/useJaegerSpans';
-import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2 } from 'lucide-react';
+import { Play, Settings, Layers, ShieldCheck, X, FileJson, CheckCircle2, Terminal, BrainCircuit, Activity, ChevronDown, Download, RadioReceiver, Sparkles, Loader2, Zap, ShieldAlert } from 'lucide-react';
 import { useOrchestratorStore } from '../../store/orchestratorStore';
 import { api } from '../../api/client';
 
@@ -395,14 +397,14 @@ spec:
 ${nodes.map(n => {
   let nodeYaml = `    - id: ${n.id}\n      type: ${n.type}`;
   if (n.type === 'tokenBudget') {
-    nodeYaml += `\n      budget_inr: ${n.data.budget || '10.00'}`;
-    nodeYaml += `\n      fallback_model: ${n.data.fallbackModel || 'llama-3-8b-local'}`;
+    nodeYaml += `\n      budget_inr: ${(n.data as NodeData).budget || '10.00'}`;
+    nodeYaml += `\n      fallback_model: ${(n.data as NodeData).fallbackModel || 'llama-3-8b-local'}`;
   } else if (n.type === 'semanticFirewall') {
-    nodeYaml += `\n      trust_threshold: ${n.data.threshold || '85'}`;
+    nodeYaml += `\n      trust_threshold: ${(n.data as NodeData).threshold || '85'}`;
   } else if (n.type === 'federatedLearner') {
-    nodeYaml += `\n      he_enabled: ${n.data.heEnabled ? 'true' : 'false'}`;
-    nodeYaml += `\n      ldp_enabled: ${n.data.ldpEnabled ? 'true' : 'false'}`;
-    nodeYaml += `\n      zkp_enabled: ${n.data.zkpEnabled ? 'true' : 'false'}`;
+    nodeYaml += `\n      he_enabled: ${(n.data as NodeData).heEnabled ? 'true' : 'false'}`;
+    nodeYaml += `\n      ldp_enabled: ${(n.data as NodeData).ldpEnabled ? 'true' : 'false'}`;
+    nodeYaml += `\n      zkp_enabled: ${(n.data as NodeData).zkpEnabled ? 'true' : 'false'}`;
   }
   return nodeYaml;
 }).join('\n')}
@@ -762,7 +764,7 @@ ${nodes.map(n => {
                   </button>
                 </div>
               </div>
-              <button onClick={() => setShowTerminal(false)} className="text-slate-500 hover:text-white">
+              <button onClick={() => setShowTerminal(false)} className="text-slate-500 hover:text-white" aria-label="Close terminal" title="Close terminal">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -817,7 +819,7 @@ ${nodes.map(n => {
               {selectedNode.type === 'semanticFirewall' && <ShieldAlert className="w-4 h-4 text-rose-400"/>}
               Node Properties
             </h3>
-            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4"/></button>
+            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white" aria-label="Close properties panel" title="Close"><X className="w-4 h-4"/></button>
           </div>
           <div className="p-4 space-y-6 flex-1 overflow-y-auto">
             
@@ -901,9 +903,10 @@ ${nodes.map(n => {
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Financial Token Bucket</h4>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Daily Budget (INR ₹)</label>
-                      <input 
-                        type="number" 
+                      <label className="block text-xs text-slate-500 mb-1" htmlFor="budget-input">Daily Budget (INR ₹)</label>
+                      <input
+                        id="budget-input"
+                        type="number"
                         value={selectedNode.data.budget as string || '10.00'}
                         onChange={(e) => {
                           setNodes(nds => nds.map(n => {
@@ -917,8 +920,9 @@ ${nodes.map(n => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Fallback Model (Graceful Degradation)</label>
-                      <select 
+                      <label className="block text-xs text-slate-500 mb-1" htmlFor="fallback-model">Fallback Model (Graceful Degradation)</label>
+                      <select
+                        id="fallback-model"
                         value={selectedNode.data.fallbackModel as string || 'llama-3-8b-local'}
                         onChange={(e) => {
                           setNodes(nds => nds.map(n => {
@@ -952,9 +956,10 @@ ${nodes.map(n => {
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Secure Execution Sandbox Defense</h4>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Trust Score Threshold (0-100)</label>
-                      <input 
-                        type="number" 
+                      <label htmlFor="threshold-input" className="block text-xs text-slate-500 mb-1">Trust Score Threshold (0-100)</label>
+                      <input
+                        id="threshold-input"
+                        type="number"
                         min="0"
                         max="100"
                         value={selectedNode.data.threshold as string || '85'}
@@ -992,7 +997,7 @@ ${nodes.map(n => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                 <h3 className="font-bold text-white">GVM GitOps Deployment Successful</h3>
               </div>
-              <button onClick={() => setShowAuditModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAuditModal(false)} className="text-slate-400 hover:text-white" aria-label="Close deployment modal" title="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

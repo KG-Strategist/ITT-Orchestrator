@@ -20,3 +20,17 @@ export interface MeltLog {
   color?: string;
   status?: string;
 }
+
+export interface NodeData {
+  label?: string;
+  source?: string;
+  privacy?: string;
+  toolName?: string;
+  budget?: string;
+  fallbackModel?: string;
+  threshold?: string;
+  heEnabled?: boolean;
+  ldpEnabled?: boolean;
+  zkpEnabled?: boolean;
+  [key: string]: unknown; // Extensibility for future node types without sacrificing type safety
+}

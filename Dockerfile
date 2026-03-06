@@ -1,6 +1,6 @@
 # Multi-stage build for minimal production image
 # Stage 1: Build
-FROM rust:1.75 as builder
+FROM rust:latest as builder
 
 WORKDIR /app
 
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
 # Copy manifests
 COPY backend/Cargo.toml backend/Cargo.toml
 COPY backend/Cargo.lock backend/Cargo.lock
+COPY sdk sdk
 COPY backend/crates backend/crates
 
 # Build dependencies (leverage caching)
