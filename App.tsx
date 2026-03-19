@@ -8,6 +8,8 @@ import Integrations from './src/pages/Integrations';
 import Login from './src/pages/Login';
 import Setup from './src/pages/Setup';
 import Dashboard from './src/pages/Dashboard';
+import ReportBuilder from './src/pages/ReportBuilder';
+import CustomReport from './src/pages/CustomReport';
 import AgentPortfolio from './src/pages/AgentPortfolio';
 import ApiRegistry from './src/pages/ApiRegistry';
 import ZoneManagement from './src/pages/ZoneManagement';
@@ -29,6 +31,8 @@ const App: React.FC = () => {
           <Route index element={<Navigate to="/dashboard/executive" replace />} />
           <Route path="dashboard" element={<Navigate to="/dashboard/executive" replace />} />
           <Route path="dashboard/executive" element={<Dashboard />} />
+          <Route path="dashboard/report-builder" element={<ReportBuilder />} />
+          <Route path="dashboard/report/:id" element={<CustomReport />} />
           <Route path="agents" element={<AgentPortfolio />} />
           <Route path="agent-builder/:id" element={<AgentBuilder />} />
           <Route path="agent-builder" element={<Navigate to="/agents" replace />} />

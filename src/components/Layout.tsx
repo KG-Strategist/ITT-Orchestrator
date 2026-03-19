@@ -6,10 +6,12 @@ import {
   Cpu, Lock, FileJson, BarChart3, Settings, Server, FileCode2, Users, Users2
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { useOrchestratorStore } from '../store/orchestratorStore';
 import { api, apiEndpoints } from '../api/client';
 
 const Layout: React.FC = () => {
   const { user, logout, isAuthenticated, hasAccess } = useAuthStore();
+  const { customReports } = useOrchestratorStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -125,6 +127,12 @@ const Layout: React.FC = () => {
                 <NavLink to="/dashboard/executive" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                   <BarChart3 className="w-4 h-4" /> Executive Overview
                 </NavLink>
+                {/* Dynamically render custom reports based on RBAC */}
+                {customReports.filter(r => r.allowedRoles.includes('All') || (user && r.allowedRoles.includes(user.role))).map(report => (
+                  <NavLink key={report.id} to={`/dashboard/report/${report.id}`} className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                    <Activity className="w-4 h-4 text-cyan-500" /> {report.name}
+                  </NavLink>
+                ))}
               </div>
             </div>
 

@@ -21,7 +21,7 @@ COPY backend/crates backend/crates
 
 # Build dependencies (leverage caching)
 WORKDIR /app/backend
-RUN cargo build --release -p itt_api
+RUN cargo build --release -p itt_api --jobs 1
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim

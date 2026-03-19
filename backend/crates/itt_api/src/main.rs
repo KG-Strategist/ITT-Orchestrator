@@ -8,6 +8,7 @@ mod routes;
 mod setup;
 mod socket;
 mod user_store;
+mod report_store;
 
 use axum::{
     extract::State,
@@ -41,6 +42,7 @@ pub struct AppState {
     pub sandbox: Arc<itt_middleware::SecureExecutionSandbox>,
     pub cost_arbitrage: Arc<itt_middleware::Zone4CostArbitrage>,
     pub mcp_registry: Arc<itt_core::MCPToolRegistry>,
+    pub report_store: Arc<report_store::ReportStore>,
 }
 
 // Helper to initialize OpenTelemetry
@@ -193,6 +195,7 @@ async fn main() {
         sandbox,
         cost_arbitrage,
         mcp_registry,
+        report_store: Arc::new(report_store::ReportStore::new(&mongo_db)),
     });
 
     if std::env::var("TEST_MODE").unwrap_or_default() == "true" {
@@ -215,6 +218,9 @@ async fn main() {
         .route("/mdm/rules/:id", delete(routes::delete_mdm_rule))
         .route("/generate-dag", post(routes::post_generate_dag))
         .route("/gvm/manifest", post(routes::post_gvm_manifest))
+        .route("/reports", get(routes::get_reports).post(routes::post_report))
+        .route("/reports/:id", delete(routes::delete_report))
+        .route("/telemetry", get(routes::get_telemetry))
         .route("/health", get(health_check))
         .route("/readiness", get(readiness_check))
         .route_layer(from_fn(middleware::governance_guardrails))

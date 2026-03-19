@@ -15,12 +15,20 @@ const Dashboard: React.FC = () => {
             <h1 className="text-3xl font-bold tracking-tight">Executive Overview</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-2">Welcome back, {user?.name}. You are logged in as <span className="font-mono text-cyan-500">{user?.role}</span>.</p>
           </div>
-          <button 
-            onClick={() => navigate('/agents')}
-            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)] flex items-center gap-2 hover:scale-105"
-          >
-            <Zap className="w-5 h-5" /> Launch Agent Builder
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/dashboard/report-builder')}
+              className="px-6 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:scale-105 shadow-sm"
+            >
+              <Activity className="w-5 h-5 text-cyan-500" /> Build Report
+            </button>
+            <button
+              onClick={() => navigate('/agents')}
+              className="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)] flex items-center gap-2 hover:scale-105"
+            >
+              <Zap className="w-5 h-5" /> Launch Agent Builder
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">

@@ -42,3 +42,15 @@ pub struct GenerateDagResponse {
     #[serde(rename = "fallbackMessage", skip_serializing_if = "Option::is_none")]
     pub fallback_message: Option<String>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CustomReport {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "dataSource")]
+    pub data_source: String,
+    #[serde(rename = "visualizationType")]
+    pub visualization_type: String,
+    #[serde(rename = "allowedRoles")]
+    pub allowed_roles: Vec<String>,
+}

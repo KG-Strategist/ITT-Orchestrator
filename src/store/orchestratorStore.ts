@@ -25,6 +25,14 @@ export interface Integration {
   status: 'connected' | 'disconnected' | 'scanning';
 }
 
+export interface CustomReport {
+  id: string;
+  name: string;
+  dataSource: string;
+  visualizationType: 'line' | 'bar' | 'area';
+  allowedRoles: string[];
+}
+
 export interface Agent_DAG_Node {
   id: string;
   type: string;
@@ -49,6 +57,12 @@ interface OrchestratorState {
   addIntegration: (integration: Omit<Integration, 'id' | 'status'>) => Promise<void>;
   deleteApi: (id: string) => Promise<void>;
   generateAgentDAG: (prompt: string) => Promise<{ nodes: Agent_DAG_Node[], edges: Agent_DAG_Edge[], fallbackMessage?: string }>;
+
+  // Custom Reports State
+  customReports: CustomReport[];
+  fetchCustomReports: () => Promise<void>;
+  saveCustomReport: (report: CustomReport) => Promise<void>;
+  deleteCustomReport: (id: string) => Promise<void>;
 }
 
 export const useOrchestratorStore = create<OrchestratorState>()(
@@ -56,6 +70,7 @@ export const useOrchestratorStore = create<OrchestratorState>()(
     (set, get) => ({
       integrations: [],
       apiRegistry: [],
+      customReports: [],
       isScanning: false,
 
       fetchIntegrations: async () => {
@@ -80,7 +95,7 @@ export const useOrchestratorStore = create<OrchestratorState>()(
         set({ isScanning: true });
         try {
           const response = await api.post<{ id: string, status: string, message: string }>(apiEndpoints.integrations.list, integrationData);
-          
+
           // Fetch the updated registry and integrations from the backend
           const updatedRegistry = await api.get<API_Registry_Object[]>(apiEndpoints.registry.list);
           const updatedIntegrations = await api.get<Integration[]>(apiEndpoints.integrations.list);
@@ -114,6 +129,41 @@ export const useOrchestratorStore = create<OrchestratorState>()(
         } catch (e) {
           console.error("Failed to generate DAG", e);
           return { nodes: [], edges: [], fallbackMessage: "Failed to generate DAG from backend." };
+        }
+      },
+
+      fetchCustomReports: async () => {
+        try {
+          const customReports = await api.get<CustomReport[]>('/reports');
+          set({ customReports });
+        } catch (e) {
+          console.error("Failed to fetch reports", e);
+        }
+      },
+
+      saveCustomReport: async (report) => {
+        try {
+          const savedReport = await api.post<CustomReport>('/reports', report);
+          set((state) => {
+            const exists = state.customReports.find(r => r.id === savedReport.id);
+            if (exists) {
+              return { customReports: state.customReports.map(r => r.id === savedReport.id ? savedReport : r) };
+            }
+            return { customReports: [...state.customReports, savedReport] };
+          });
+        } catch (e) {
+          console.error("Failed to save report", e);
+        }
+      },
+
+      deleteCustomReport: async (id) => {
+        try {
+          await api.delete(`/reports/${id}`);
+          set((state) => ({
+            customReports: state.customReports.filter(r => r.id !== id)
+          }));
+        } catch (e) {
+          console.error("Failed to delete report", e);
         }
       }
     }),
